@@ -1,0 +1,8 @@
+.github
+.idea
+.vs
+
+pkg
+dist
+target
+node_modules
