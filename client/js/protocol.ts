@@ -8,6 +8,12 @@ export class SignalMessage {
 	SessionReady() {
 		return {
 			Encode: (sessionId: string, userId: number) => JSON.stringify({ SessionReady: [sessionId, userId] }),
+			Decode: (data: { SessionReady: any[] }): { sessionId: string; userId: number } => {
+				return {
+					sessionId: data.SessionReady[0],
+					userId: data.SessionReady[1],
+				}
+			},
 		}
 	}
 
@@ -27,6 +33,13 @@ export class SignalMessage {
 	SdpAnswer() {
 		return {
 			Encode: (sessionId: string, userId: number, answer: string) => JSON.stringify({ SdpAnswer: [sessionId, userId, answer] }),
+			Decode: (data: { SdpAnswer: any[] }): { sessionId: string; userId: number; answer: string } => {
+				return {
+					sessionId: data.SdpAnswer[0],
+					userId: data.SdpAnswer[1],
+					answer: data.SdpAnswer[2],
+				}
+			},
 		}
 	}
 
