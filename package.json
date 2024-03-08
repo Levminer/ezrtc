@@ -1,0 +1,31 @@
+{
+	"name": "ezrtc",
+	"description": "Easy WebRTC communication",
+	"version": "0.2.0",
+	"license": "MIT",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"type": "module",
+	"scripts": {
+		"build": "tsup --format esm --dts"
+	},
+	"keywords": [
+		"WebRTC",
+		"ezrtc"
+	],
+	"files": [
+		"client/js",
+		"dist"
+	],
+	"devDependencies": {
+		"tsup": "^8.0.2",
+		"typescript": "^5.4.2"
+	},
+	"tsup": {
+		"entry": [
+			"client/js/index.ts"
+		],
+		"splitting": false,
+		"sourcemap": true
+	}
+}
