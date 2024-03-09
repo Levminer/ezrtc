@@ -2,13 +2,13 @@ import { SignalMessage } from "./protocol.js"
 
 export class EzrtcClient {
 	sessionId: string
-	host: string
-	rc = new RTCPeerConnection()
+	hostURL: string
+	peerConnection = new RTCPeerConnection()
 	#send = true
 	#messageCallback?: (message: string) => void
 
 	constructor(host: string, sessionId: string) {
-		this.host = host
+		this.hostURL = host
 		this.sessionId = sessionId
 
 		const websocket = new WebSocket(host)
@@ -41,32 +41,32 @@ export class EzrtcClient {
 						sdp: sdpOffer.offer,
 					}
 
-					this.rc.onicecandidate = (e) => {
+					this.peerConnection.onicecandidate = (e) => {
 						// Only send one ICE candidate
 						if (this.#send) {
-							websocket.send(new SignalMessage().SdpAnswer().Encode(sessionId, sdpOffer.userId, this.rc.localDescription!.sdp))
+							websocket.send(new SignalMessage().SdpAnswer().Encode(sessionId, sdpOffer.userId, this.peerConnection.localDescription!.sdp))
 							this.#send = false
 						}
 					}
 
-					this.rc.ondatachannel = (e) => {
-						const receiveChannel = e.channel
+					this.peerConnection.ondatachannel = (e) => {
+						const dataChannel = e.channel
 
-						receiveChannel.onmessage = (e) => {
+						dataChannel.onmessage = (e) => {
 							this.#messageCallback?.(e.data)
 							console.log(`Message received: ${e.data}`)
 						}
 
-						receiveChannel.onopen = (e) => console.log("Data channel opened")
-						receiveChannel.onclose = (e) => console.log("Data channel closed")
+						dataChannel.onopen = (e) => console.log("Data channel opened")
+						dataChannel.onclose = (e) => console.log("Data channel closed")
 					}
 
-					this.rc.setRemoteDescription(offer).then(() => {
+					this.peerConnection.setRemoteDescription(offer).then(() => {
 						console.log("offer set")
 					})
 
-					this.rc.createAnswer().then(async (a) => {
-						await this.rc.setLocalDescription(a)
+					this.peerConnection.createAnswer().then(async (a) => {
+						await this.peerConnection.setLocalDescription(a)
 						console.log("answer created")
 					})
 				}
