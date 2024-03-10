@@ -1,10 +1,14 @@
 import { SignalMessage } from "./protocol.js"
 
+/**
+ * This class represents a client that connects to a host and can send and receive messages.
+ * @param {string} host - The URL of the host to connect to.
+ * @param {string} sessionId - The session ID to use for the connection.
+ */
 export class EzrtcClient {
 	sessionId: string
 	hostURL: string
 	peerConnection = new RTCPeerConnection()
-	#send = true
 	#messageCallback?: (message: string) => void
 
 	constructor(host: string, sessionId: string) {
@@ -42,10 +46,11 @@ export class EzrtcClient {
 					}
 
 					this.peerConnection.onicecandidate = (e) => {
-						// Only send one ICE candidate
-						if (this.#send) {
-							websocket.send(new SignalMessage().SdpAnswer().Encode(sessionId, sdpOffer.userId, this.peerConnection.localDescription!.sdp))
-							this.#send = false
+						// Only send ICE candidates if Candidate is present
+						if (e.candidate) {
+							websocket.send(
+								new SignalMessage().SdpAnswer().Encode(sessionId, sdpOffer.userId, this.peerConnection.localDescription!.sdp),
+							)
 						}
 					}
 
@@ -53,8 +58,8 @@ export class EzrtcClient {
 						const dataChannel = e.channel
 
 						dataChannel.onmessage = (e) => {
+							// Send received messages to the callback
 							this.#messageCallback?.(e.data)
-							console.log(`Message received: ${e.data}`)
 						}
 
 						dataChannel.onopen = (e) => console.log("Data channel opened")
@@ -74,8 +79,10 @@ export class EzrtcClient {
 		}
 	}
 
+	/**
+	 * This callback is called when a message is received from the other peer.
+	 */
 	onMessage(callback: (message: string) => void) {
-		// Store the callback for later use
 		this.#messageCallback = callback
 	}
 }

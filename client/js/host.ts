@@ -36,21 +36,21 @@ export class EzrtcHost {
 					const sessionReady = new SignalMessage().SessionReady().Decode(data)
 
 					// create rtc peer connection
-					const rtc = new RTCPeerConnection()
-					this.peerConnections.set(sessionReady.userId, rtc)
+					const peerConnection = new RTCPeerConnection()
+					this.peerConnections.set(sessionReady.userId, peerConnection)
 
-					const dataChannel = rtc.createDataChannel(`send-${sessionReady.userId}`)
+					const dataChannel = peerConnection.createDataChannel(`send-${sessionReady.userId}`)
 					this.dataChannels.set(sessionReady.userId, dataChannel)
 
-					rtc.onicecandidate = (e) => {
+					peerConnection.onicecandidate = (e) => {
 						// Only send one ICE candidate
 						console.log(e)
 					}
 
-					rtc.createOffer().then(async (a) => {
-						await rtc.setLocalDescription(a)
+					peerConnection.createOffer().then(async (a) => {
+						await peerConnection.setLocalDescription(a)
 
-						websocket.send(new SignalMessage().SdpOffer().Encode(sessionId, sessionReady.userId, rtc.localDescription!.sdp))
+						websocket.send(new SignalMessage().SdpOffer().Encode(sessionId, sessionReady.userId, peerConnection.localDescription!.sdp))
 					})
 				}
 
