@@ -56,33 +56,36 @@ export class EzrtcHost {
 
 				if (data.SdpAnswer) {
 					const sdpAnswer = new SignalMessage().SdpAnswer().Decode(data)
-					const rtc = this.peerConnections.get(sdpAnswer.userId)
+					const peerConnection = this.peerConnections.get(sdpAnswer.userId)
 
 					const answer: RTCSessionDescriptionInit = {
 						type: "answer",
 						sdp: sdpAnswer.answer,
 					}
 
-					rtc!.setRemoteDescription(answer).then(() => {
-						console.log("answer set")
+					console.log(peerConnection?.connectionState)
+					if (peerConnection && peerConnection.connectionState === "new") {
+						peerConnection.setRemoteDescription(answer).then(() => {
+							console.log("answer set")
 
-						// get data channel
-						const dataChannel = this.dataChannels.get(sdpAnswer.userId)
+							// get data channel
+							const dataChannel = this.dataChannels.get(sdpAnswer.userId)
 
-						if (dataChannel) {
-							dataChannel.onopen = (e) => {
-								console.log("Data channel opened")
+							if (dataChannel) {
+								dataChannel.onopen = (e) => {
+									console.log("Data channel opened")
+								}
+
+								dataChannel.onerror = (e) => {
+									console.log("Data channel error", e)
+								}
+
+								dataChannel.onclose = (e) => {
+									console.log("Data channel closed")
+								}
 							}
-
-							dataChannel.onerror = (e) => {
-								console.log("Data channel error", e)
-							}
-
-							dataChannel.onclose = (e) => {
-								console.log("Data channel closed")
-							}
-						}
-					})
+						})
+					}
 				}
 			}
 		}

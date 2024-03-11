@@ -18,6 +18,7 @@ use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
 use webrtc::ice_transport::ice_credential_type::RTCIceCredentialType;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
+use webrtc::media::audio::buffer::info;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
@@ -80,7 +81,6 @@ pub async fn main() -> Result<()> {
 
     let peer_connection = Arc::new(api.new_peer_connection(config).await.unwrap());
     let writer = Arc::new(write.clone());
-    let send = Arc::new(Mutex::new(true));
 
     // Setup  WebRTC DataChannel
     peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
@@ -145,47 +145,34 @@ pub async fn main() -> Result<()> {
 
                                 let pc = Arc::downgrade(&peer_connection);
                                 let wr = Arc::downgrade(&writer);
-                                let send = Arc::downgrade(&send);
 
                                 peer_connection.on_ice_candidate(Box::new(
                                     move |candidate: Option<RTCIceCandidate>| {
-                                        info!("on_ice_candidate {:?}", candidate);
+                                        info!("Ica candidate received: {:?}", candidate);
 
                                         let pc2 = pc.clone();
                                         let wr2 = wr.clone();
                                         let session_id2 = session_id.clone();
-                                        let send2 = send.clone();
 
                                         Box::pin(async move {
                                             if let Some(c) = candidate {
-                                                info!("Ice candidate received: {:?}", c);
-
                                                 if let Some(pc) = pc2.upgrade() {
                                                     let ld = pc.local_description().await.unwrap();
 
                                                     if let Some(wr) = wr2.upgrade() {
-                                                        if let Some(send) = send2.upgrade() {
-                                                            let mut val = send.lock().unwrap();
+                                                        info!("sending answer {c}");
 
-                                                            // Make sure only one answer is sent
-                                                            if *val {
-                                                                info!("sending answer");
-
-                                                                wr.send(Message::Text(
-                                                                    serde_json::to_string(
-                                                                        &SignalMessage::SdpAnswer(
-                                                                            session_id2,
-                                                                            user_id,
-                                                                            ld.sdp,
-                                                                        ),
-                                                                    )
-                                                                    .unwrap(),
-                                                                ))
-                                                                .unwrap();
-
-                                                                *val = false;
-                                                            }
-                                                        }
+                                                        wr.send(Message::Text(
+                                                            serde_json::to_string(
+                                                                &SignalMessage::SdpAnswer(
+                                                                    session_id2,
+                                                                    user_id,
+                                                                    ld.sdp,
+                                                                ),
+                                                            )
+                                                            .unwrap(),
+                                                        ))
+                                                        .unwrap();
                                                     }
                                                 }
                                             }
