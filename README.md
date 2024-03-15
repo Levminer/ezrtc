@@ -1,6 +1,7 @@
 # ezrtc
 
 -   Easy cross-platform WebRTC communication.
+-   Currently supports: JavaScript, C#, Rust.
 
 ## Getting started
 
@@ -8,11 +9,10 @@
 
 ### JavaScript
 
--   Install the package using npm:
-
-`npm i ezrtc`
+-   Install the package using npm: `npm i ezrtc`
 
 -   Example usage:
+
 ```js
 // Host
 import { EzrtcHost } from "ezrtc"
@@ -46,3 +46,4 @@ client.onMessage((message) => {
 ## Credits
 
 -   Server based on: [wasm-peers](https://github.com/wasm-peers/wasm-peers)
+-   Licensed under [MIT](https://github.com/levminer/ezrtc/blob/main/LICENSE.md)

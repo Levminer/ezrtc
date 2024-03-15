@@ -4,16 +4,22 @@ import { SignalMessage } from "./protocol.js"
  * This class represents a client that connects to a host and can send and receive messages.
  * @param {string} host - The URL of the host to connect to.
  * @param {string} sessionId - The session ID to use for the connection.
+ * @param {RTCIceServer[]} [iceServers] - The ICE servers to use for the connection.
  */
 export class EzrtcClient {
 	sessionId: string
 	hostURL: string
-	peerConnection = new RTCPeerConnection()
+	peerConnection: RTCPeerConnection
 	#messageCallback?: (message: string) => void
 
-	constructor(host: string, sessionId: string) {
+	constructor(host: string, sessionId: string, iceServers?: RTCIceServer[]) {
 		this.hostURL = host
 		this.sessionId = sessionId
+		this.peerConnection = new RTCPeerConnection({
+			iceServers: iceServers,
+		})
+
+		console.log(this.peerConnection.getConfiguration())
 
 		const websocket = new WebSocket(host)
 
