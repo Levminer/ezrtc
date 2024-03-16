@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>ezrtc</Title>
+    <Authors>Levminer</Authors>
+    <PackageProjectUrl>https://github.com/Levminer/ezrtc</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Levminer/ezrtc</RepositoryUrl>
+    <Version>0.1.0</Version>
+    <Description>Easy cross-platform WebRTC communication</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SIPSorcery" Version="6.2.1" />
+    <PackageReference Include="Websocket.Client" Version="5.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+</Project>

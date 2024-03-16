@@ -1,0 +1,110 @@
+﻿using System.Text.Json;
+
+namespace ezrtc
+{
+	public class SignalMessage
+	{
+		public class SessionJoin
+		{
+			public static string Encode(string sessionId, bool isHost)
+			{
+				var message = new { SessionJoin = new object[] { sessionId, isHost } };
+				return JsonSerializer.Serialize(message);
+			}
+		}
+
+		public class SessionReady
+		{
+			public class SessionReadyInput
+			{
+				public object[] SessionReady { get; set; }
+			}
+
+			public class SessionReadyOutput
+			{
+				public string sessionId;
+				public string userId;
+			}
+
+			public static SessionReadyOutput Decode(string data)
+			{
+				var message = JsonSerializer.Deserialize<SessionReadyInput>(data);
+				object[] sessionReady = message.SessionReady;
+
+				return new SessionReadyOutput
+				{
+					sessionId = sessionReady[0].ToString(),
+					userId = sessionReady[1].ToString(),
+				};
+			}
+		}
+
+		public class SdpOffer
+		{
+			public class SdpOfferInput
+			{
+				public object[] SdpOffer { get; set; }
+			}
+
+			public class SdpOfferOutput
+			{
+				public string sessionId;
+				public string userId;
+				public string offer;
+			}
+
+			public static string Encode(string sessionId, string userId, string offer)
+			{
+				var message = new { SdpOffer = new object[] { sessionId, Convert.ToUInt32(userId), offer } };
+				return JsonSerializer.Serialize(message);
+			}
+
+			public static SdpOfferOutput Decode(string data)
+			{
+				var message = JsonSerializer.Deserialize<SdpOfferInput>(data);
+				object[] sdpOffer = message.SdpOffer;
+
+				return new SdpOfferOutput
+				{
+					sessionId = sdpOffer[0].ToString(),
+					userId = sdpOffer[1].ToString(),
+					offer = sdpOffer[2].ToString()
+				};
+			}
+		}
+
+		public class SdpAnswer
+		{
+			public class SdpAnswerInput
+			{
+				public object[] SdpAnswer { get; set; }
+			}
+
+			public class SdpAnswerOutput
+			{
+				public string sessionId;
+				public string userId;
+				public string answer;
+			}
+
+			public static SdpAnswerOutput Decode(string data)
+			{
+				var message = JsonSerializer.Deserialize<SdpAnswerInput>(data);
+				object[] sdpOffer = message.SdpAnswer;
+
+				return new SdpAnswerOutput
+				{
+					sessionId = sdpOffer[0].ToString(),
+					userId = sdpOffer[1].ToString(),
+					answer = sdpOffer[2].ToString()
+				};
+			}
+
+			public static string Encode(string sessionId, string userId, string answer)
+			{
+				var message = new { SdpAnswer = new object[] { sessionId, Convert.ToUInt32(userId), answer } };
+				return JsonSerializer.Serialize(message);
+			}
+		}
+	}
+}
