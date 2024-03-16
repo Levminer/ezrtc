@@ -42,7 +42,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
         loop {
             interval.tick().await;
             info!("sending ping to user {:?}", user_id2);
-            if let Err(e) = tx2.send(Message::Text("{ping: 'ping'}".to_string())) {
+            if let Err(e) = tx2.send(Message::Text("{\"ping\": \"ping\"}".to_string())) {
                 error!("websocket ping error: {}", e);
             }
         }
