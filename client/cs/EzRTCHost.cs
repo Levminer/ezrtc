@@ -23,7 +23,7 @@ namespace ezrtc
 			var exitEvent = new ManualResetEvent(false);
 			using var websocketClient = new WebsocketClient(hostURL);
 
-			websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(30);
+			websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(90);
 			websocketClient.ReconnectionHappened.Subscribe(info =>
 				Console.WriteLine($"Reconnection happened, type: {info.Type}"));
 
