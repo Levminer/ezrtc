@@ -25,7 +25,11 @@ namespace ezrtc
 
 			websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(90);
 			websocketClient.ReconnectionHappened.Subscribe(info =>
-				Console.WriteLine($"Reconnection happened, type: {info.Type}"));
+			{
+				Console.WriteLine($"Recconnected: ${info.Type}");
+				var joinMessage = SignalMessage.SessionJoin.Encode(sessionId, true);
+				websocketClient.Send(joinMessage);
+			});
 
 			RTCConfiguration config = new RTCConfiguration
 			{
@@ -85,14 +89,6 @@ namespace ezrtc
 			});
 
 			websocketClient.Start();
-
-			Task.Run(() =>
-			{
-				var joinMessage = SignalMessage.SessionJoin.Encode(sessionId, true);
-
-				websocketClient.Send(joinMessage);
-			});
-
 			exitEvent.WaitOne();
 		}
 
