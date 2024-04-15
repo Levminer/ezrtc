@@ -87,6 +87,11 @@ async fn user_message(
     sessions: &Sessions,
 ) -> crate::Result<()> {
     if let Ok(msg) = msg.to_text() {
+        if msg.is_empty() {
+            // warn!("empty message from user {:?}", sender_id);
+            return Ok(());
+        }
+
         match serde_json::from_str::<SignalMessage>(msg) {
             Ok(request) => {
                 info!("message received from user {:?}: {:?}", sender_id, request);
