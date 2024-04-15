@@ -1,2 +1,2 @@
-export { EzrtcClient } from "./client.js"
-export { EzrtcHost } from "./host.js"
+export { EzRTCClient } from "./client.js"
+export { EzRTCHost } from "./host.js"

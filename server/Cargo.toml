@@ -1,12 +1,11 @@
 [package]
 name = "ezrtc-server"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Lőrik Levente <levminer@levminer.com>"]
 edition = "2021"
 license = "MIT"
 description = "Easy-to-use wrapper for WebRTC DataChannels peer-to-peer connections written in Rust."
-#homepage
-repository = "https://github.com/levminer/"
+repository = "https://github.com/levminer/ezrtc"
 keywords = ["webrtc", "datachannel", "peer-to-peer", "p2p"]
 categories = ["network-programming", "web-programming"]
 readme = "README.md"

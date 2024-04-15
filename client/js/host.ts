@@ -6,7 +6,7 @@ import { SignalMessage } from "./protocol.js"
  * @param {string} sessionId - The session ID to use for the connection.
  * @param {RTCIceServer[]} [iceServers] - The ICE servers to use for the connection.
  */
-export class EzrtcHost {
+export class EzRTCHost {
 	sessionId: string
 	hostURL: string
 	peerConnections = new Map<number, RTCPeerConnection>()
