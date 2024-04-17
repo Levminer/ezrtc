@@ -1,4 +1,5 @@
 ﻿using SIPSorcery.Net;
+using System.Diagnostics;
 using Websocket.Client;
 
 namespace ezrtc
@@ -10,6 +11,7 @@ namespace ezrtc
 		public List<RTCIceServer> iceServers;
 		private Dictionary<string, RTCPeerConnection> peerConnections = new();
 		private Dictionary<string, RTCDataChannel> dataChannels = new();
+		public Action<RTCDataChannel>? onDataChannelOpen { get; set; }
 
 		public EzRTCHost(Uri hostURL, string sessionId, List<RTCIceServer>? iceServers = null)
 		{
@@ -26,7 +28,7 @@ namespace ezrtc
 			websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(90);
 			websocketClient.ReconnectionHappened.Subscribe(info =>
 			{
-				Console.WriteLine($"Recconnected: ${info.Type}");
+				Debug.WriteLine($"Connection changed: ${info.Type}");
 				var joinMessage = SignalMessage.SessionJoin.Encode(sessionId, true);
 				websocketClient.Send(joinMessage);
 			});
@@ -38,7 +40,7 @@ namespace ezrtc
 
 			websocketClient.MessageReceived.Subscribe(async msg =>
 			{
-				Console.WriteLine($"Message received: {msg}");
+				Debug.WriteLine($"Message received: {msg}");
 
 				if (msg.Text.Contains("SessionReady"))
 				{
@@ -49,6 +51,10 @@ namespace ezrtc
 
 					var dataChannel = await peerConnection.createDataChannel($"send-{sessionReady.userId}");
 					dataChannels.Add(sessionReady.userId, dataChannel);
+					dataChannel.onopen += () =>
+					{
+						onDataChannelOpen?.Invoke(dataChannel);
+					};
 
 					var offer = peerConnection.createOffer();
 
@@ -72,17 +78,7 @@ namespace ezrtc
 
 					if (peerConnection.connectionState == RTCPeerConnectionState.@new)
 					{
-						var result = peerConnection.setRemoteDescription(answer);
-
-						if (result == SetDescriptionResultEnum.OK)
-						{
-							var dataChannel = dataChannels[sdpAnswer.userId];
-
-							dataChannel.onopen += () =>
-							{
-								Console.WriteLine("dc open");
-							};
-						}
+						peerConnection.setRemoteDescription(answer);
 					}
 
 				}
