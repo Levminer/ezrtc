@@ -101,6 +101,9 @@ export class EzRTCHost {
 		}
 	}
 
+	/**
+	 * Send a message to a specific user.
+	 */
 	sendMessage(message: string, userId: number) {
 		const dataChannel = this.dataChannels.get(userId)
 		if (dataChannel) {
@@ -108,6 +111,9 @@ export class EzRTCHost {
 		}
 	}
 
+	/**
+	 * Send a message to all users.
+	 */
 	sendMessageToAll(message: string) {
 		for (const [_userId, dataChannel] of this.dataChannels) {
 			if (dataChannel.readyState === "open") {

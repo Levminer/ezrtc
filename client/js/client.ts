@@ -10,6 +10,7 @@ export class EzRTCClient {
 	sessionId: string
 	hostURL: string
 	peerConnection: RTCPeerConnection
+	dataChannel?: RTCDataChannel
 	#messageCallback?: (message: string) => void
 
 	constructor(host: string, sessionId: string, iceServers?: RTCIceServer[]) {
@@ -18,8 +19,6 @@ export class EzRTCClient {
 		this.peerConnection = new RTCPeerConnection({
 			iceServers: iceServers,
 		})
-
-		console.log(this.peerConnection.getConfiguration())
 
 		const websocket = new WebSocket(host)
 
@@ -61,15 +60,15 @@ export class EzRTCClient {
 					}
 
 					this.peerConnection.ondatachannel = (e) => {
-						const dataChannel = e.channel
+						this.dataChannel = e.channel
 
-						dataChannel.onmessage = (e) => {
+						this.dataChannel.onmessage = (e) => {
 							// Send received messages to the callback
 							this.#messageCallback?.(e.data)
 						}
 
-						dataChannel.onopen = (e) => console.log("Data channel opened")
-						dataChannel.onclose = (e) => console.log("Data channel closed")
+						this.dataChannel.onopen = (e) => console.log("Data channel opened")
+						this.dataChannel.onclose = (e) => console.log("Data channel closed")
 					}
 
 					this.peerConnection.setRemoteDescription(offer).then(() => {
@@ -80,6 +79,20 @@ export class EzRTCClient {
 						await this.peerConnection.setLocalDescription(a)
 						console.log("answer created")
 					})
+
+					this.peerConnection.onconnectionstatechange = (state) => {
+						console.log("State changed", state.currentTarget)
+
+						// @ts-ignore
+						if (state.currentTarget.connectionState === "failed" || state.currentTarget.connectionState === "disconnected") {
+							this.dataChannel?.close()
+							this.peerConnection?.close()
+
+							this.peerConnection = new RTCPeerConnection({
+								iceServers: iceServers,
+							})
+						}
+					}
 				}
 			}
 		}
@@ -90,5 +103,14 @@ export class EzRTCClient {
 	 */
 	onMessage(callback: (message: string) => void) {
 		this.#messageCallback = callback
+	}
+
+	/**
+	 * Send a message to the other peer.
+	 */
+	sendMessage(message: string) {
+		if (this.dataChannel?.readyState === "open") {
+			this.dataChannel.send(message)
+		}
 	}
 }
