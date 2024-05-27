@@ -61,7 +61,6 @@ namespace ezrtc
 					await peerConnection.setLocalDescription(offer);
 
 					var sdpOffer = SignalMessage.SdpOffer.Encode(sessionId, sessionReady.userId, peerConnection.localDescription.sdp.ToString());
-					Console.WriteLine(sdpOffer);
 					websocketClient.Send(sdpOffer);
 				}
 
@@ -76,11 +75,24 @@ namespace ezrtc
 						type = RTCSdpType.answer,
 					};
 
-					if (peerConnection.connectionState == RTCPeerConnectionState.@new)
+					if (peerConnection != null && peerConnection.connectionState == RTCPeerConnectionState.@new)
 					{
-						peerConnection.setRemoteDescription(answer);
-					}
+						var res = peerConnection.setRemoteDescription(answer);
 
+						peerConnection.onconnectionstatechange += (state) =>
+						{
+							Debug.WriteLine(state.ToString());
+
+							if (state == RTCPeerConnectionState.failed || state == RTCPeerConnectionState.disconnected)
+							{
+								dataChannels[sdpAnswer.userId].close();
+								peerConnection.close();
+
+								peerConnections.Remove(sdpAnswer.userId);
+								dataChannels.Remove(sdpAnswer.userId);
+							}
+						};
+					}
 				}
 			});
 
