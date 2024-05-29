@@ -73,7 +73,6 @@ export class EzRTCHost {
 						sdp: sdpAnswer.answer,
 					}
 
-					console.log(peerConnection?.connectionState)
 					if (peerConnection && peerConnection.connectionState === "new") {
 						peerConnection.setRemoteDescription(answer).then(() => {
 							console.log("answer set")
