@@ -56,6 +56,15 @@ export class EzRTCClient {
 							websocket.send(
 								new SignalMessage().SdpAnswer().Encode(sessionId, sdpOffer.userId, this.peerConnection.localDescription!.sdp),
 							)
+
+							let iceInfo = {
+								candidate: e.candidate.candidate,
+								sdpMid: e.candidate.sdpMid,
+								sdpMLineIndex: e.candidate.sdpMLineIndex,
+								usernameFragment: e.candidate.usernameFragment,
+							}
+
+							websocket.send(new SignalMessage().IceCandidate().Encode(sessionId, sdpOffer.userId, JSON.stringify(iceInfo)))
 						}
 					}
 
