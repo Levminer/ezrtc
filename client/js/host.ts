@@ -73,9 +73,9 @@ export class EzRTCHost {
 						sdp: sdpAnswer.answer,
 					}
 
-					if (peerConnection && peerConnection.connectionState === "new") {
+					if (peerConnection && peerConnection.signalingState === "have-local-offer") {
 						peerConnection.setRemoteDescription(answer).then(() => {
-							console.log("answer set")
+							console.log("Answer set")
 
 							// get data channel
 							const dataChannel = this.dataChannels.get(sdpAnswer.userId)
@@ -93,6 +93,24 @@ export class EzRTCHost {
 									console.log("Data channel closed")
 								}
 							}
+						})
+					}
+				}
+
+				if (data.IceCandidate) {
+					const iceCandidate = new SignalMessage().IceCandidate().Decode(data)
+					const peerConnection = this.peerConnections.get(iceCandidate.userId)
+
+					if (peerConnection) {
+						const candidate = new RTCIceCandidate({
+							candidate: iceCandidate.candidate.candidate,
+							sdpMid: iceCandidate.candidate.sdpMid,
+							sdpMLineIndex: iceCandidate.candidate.sdpMLineIndex,
+							usernameFragment: iceCandidate.candidate.usernameFragment,
+						})
+
+						peerConnection.addIceCandidate(candidate).then(() => {
+							console.log("Ice candidate added")
 						})
 					}
 				}

@@ -1,3 +1,10 @@
+export interface IceCandidate {
+	candidate: string
+	sdpMid: string | null
+	sdpMLineIndex: number | null
+	usernameFragment: string | null
+}
+
 export class SignalMessage {
 	SessionJoin() {
 		return {
@@ -45,7 +52,15 @@ export class SignalMessage {
 
 	IceCandidate() {
 		return {
-			Encode: (sessionId: string, userId: number, candidate: string) => JSON.stringify({ IceCandidate: [sessionId, userId, candidate] }),
+			Encode: (sessionId: string, userId: number, candidate: IceCandidate) =>
+				JSON.stringify({ IceCandidate: [sessionId, userId, JSON.stringify(candidate)] }),
+			Decode: (data: { IceCandidate: any[] }): { sessionId: string; userId: number; candidate: IceCandidate } => {
+				return {
+					sessionId: data.IceCandidate[0],
+					userId: data.IceCandidate[1],
+					candidate: JSON.parse(data.IceCandidate[2]),
+				}
+			},
 		}
 	}
 }

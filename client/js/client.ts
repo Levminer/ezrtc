@@ -1,4 +1,4 @@
-import { SignalMessage } from "./protocol.js"
+import { IceCandidate, SignalMessage } from "./protocol.js"
 
 /**
  * This class represents a client that connects to a host and can send and receive messages.
@@ -57,14 +57,14 @@ export class EzRTCClient {
 								new SignalMessage().SdpAnswer().Encode(sessionId, sdpOffer.userId, this.peerConnection.localDescription!.sdp),
 							)
 
-							let iceInfo = {
+							let iceInfo: IceCandidate = {
 								candidate: e.candidate.candidate,
 								sdpMid: e.candidate.sdpMid,
 								sdpMLineIndex: e.candidate.sdpMLineIndex,
 								usernameFragment: e.candidate.usernameFragment,
 							}
 
-							websocket.send(new SignalMessage().IceCandidate().Encode(sessionId, sdpOffer.userId, JSON.stringify(iceInfo)))
+							websocket.send(new SignalMessage().IceCandidate().Encode(sessionId, sdpOffer.userId, iceInfo))
 						}
 					}
 
