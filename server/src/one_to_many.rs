@@ -1,16 +1,15 @@
 use anyhow::anyhow;
 use axum::extract::ws::{Message, WebSocket};
+use ezrtc::protocol::{SessionId, SignalMessage, UserId};
 use futures_util::{SinkExt, StreamExt, TryFutureExt};
 use log::{error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time;
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use wasm_peers_protocol::one_to_many::SignalMessage;
-use wasm_peers_protocol::{SessionId, UserId};
 
 #[derive(Default, Debug)]
 pub struct Session {
@@ -18,12 +17,19 @@ pub struct Session {
     pub users: HashSet<UserId>,
 }
 
+#[derive(Default, Debug)]
+pub struct Ping {
+    pub host: bool,
+    pub responded: bool,
+}
+
 pub type Connections = Arc<RwLock<HashMap<UserId, mpsc::UnboundedSender<Message>>>>;
 pub type Sessions = Arc<RwLock<HashMap<SessionId, Session>>>;
+pub type Pings = Arc<Mutex<HashMap<UserId, Arc<Ping>>>>;
 
 static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1);
 
-pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: Sessions) {
+pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: Sessions, pings: Pings) {
     let user_id = UserId::new(NEXT_USER_ID.fetch_add(1, Ordering::Relaxed));
     info!("new user connected: {:?}", user_id);
 
@@ -35,14 +41,36 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
 
     let tx2 = tx.clone();
     let user_id2 = user_id.clone();
+    let pings2 = pings.clone();
 
     let task = tokio::task::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(60));
+        let mut interval = time::interval(Duration::from_secs(10));
 
         loop {
             interval.tick().await;
+
+            let status = {
+                let pings = pings2.lock().unwrap();
+                pings.get(&user_id2).cloned()
+            };
+
+            if status.is_some() {
+                let ping = status.unwrap();
+
+                if ping.host && !ping.responded {
+                    tx2.send(Message::Close(None)).unwrap();
+                    error!("User failed to respond, closing connection: {:?}", user_id2);
+                } else if ping.host && ping.responded {
+                    pings2.lock().unwrap().insert(user_id2.clone(), Arc::new(Ping { host: true, responded: false }));
+                }
+            } else {
+                info!("user is not host {:?}", user_id2);
+            }
+
             info!("sending ping to user {:?}", user_id2);
-            if let Err(e) = tx2.send(Message::Text("{\"ping\": \"ping\"}".to_string())) {
+            let response = SignalMessage::Ping(false, user_id2.clone());
+            let response = serde_json::to_string(&response).unwrap();
+            if let Err(e) = tx2.send(Message::Text(response)) {
                 error!("websocket ping error: {}", e);
             }
         }
@@ -71,7 +99,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
             }
         };
 
-        if let Err(err) = user_message(user_id, msg, &connections, &sessions).await {
+        if let Err(err) = user_message(user_id, msg, &connections, &sessions, &pings).await {
             error!("error while handling user message: {}", err);
         }
     }
@@ -80,14 +108,9 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
     user_disconnected(user_id, &connections, &sessions).await;
 }
 
-async fn user_message(
-    sender_id: UserId,
-    msg: Message,
-    connections: &Connections,
-    sessions: &Sessions,
-) -> crate::Result<()> {
+async fn user_message(sender_id: UserId, msg: Message, connections: &Connections, sessions: &Sessions, pings: &Pings) -> crate::Result<()> {
     if let Ok(msg) = msg.to_text() {
-        if msg.is_empty() {
+        if msg.is_empty() || msg == "ping" {
             // warn!("empty message from user {:?}", sender_id);
             return Ok(());
         }
@@ -98,9 +121,7 @@ async fn user_message(
                 match request {
                     SignalMessage::SessionJoin(session_id, is_host) => {
                         let mut sessions_writer = sessions.write().await;
-                        let session = sessions_writer
-                            .entry(session_id.clone())
-                            .or_insert_with(Session::default);
+                        let session = sessions_writer.entry(session_id.clone()).or_insert_with(Session::default);
                         let connections_reader = connections.read().await;
 
                         if is_host && session.host.is_none() {
@@ -108,35 +129,23 @@ async fn user_message(
                             // start connections with all already present users
                             for client_id in &session.users {
                                 {
-                                    let host_tx = connections_reader
-                                        .get(&sender_id)
-                                        .expect("host not in connections");
-                                    let host_response =
-                                        SignalMessage::SessionReady(session_id.clone(), *client_id);
+                                    let host_tx = connections_reader.get(&sender_id).expect("host not in connections");
+                                    let host_response = SignalMessage::SessionReady(session_id.clone(), *client_id);
                                     let host_response = serde_json::to_string(&host_response)?;
-                                    host_tx
-                                        .send(Message::Text(host_response))
-                                        .expect("failed to send SessionReady message to host");
+                                    host_tx.send(Message::Text(host_response)).expect("failed to send SessionReady message to host");
                                 }
                             }
                         } else if is_host && session.host.is_some() {
-                            error!(
-                                "connecting user wants to be a host, but host is already present!"
-                            );
+                            error!("connecting user wants to be a host, but host is already present!");
                         } else {
                             // connect new user with host
                             session.users.insert(sender_id);
 
                             if let Some(host_id) = session.host {
-                                let host_tx = connections_reader
-                                    .get(&host_id)
-                                    .expect("host not in connections");
-                                let host_response =
-                                    SignalMessage::SessionReady(session_id.clone(), sender_id);
+                                let host_tx = connections_reader.get(&host_id).expect("host not in connections");
+                                let host_response = SignalMessage::SessionReady(session_id.clone(), sender_id);
                                 let host_response = serde_json::to_string(&host_response)?;
-                                host_tx
-                                    .send(Message::Text(host_response))
-                                    .expect("failed to send SessionReady message to host");
+                                host_tx.send(Message::Text(host_response)).expect("failed to send SessionReady message to host");
                             }
                         }
                     }
@@ -163,15 +172,18 @@ async fn user_message(
                         }
                     }
                     SignalMessage::IceCandidate(session_id, recipient_id, candidate) => {
-                        let response =
-                            SignalMessage::IceCandidate(session_id, sender_id, candidate);
+                        let response = SignalMessage::IceCandidate(session_id, sender_id, candidate);
                         let response = serde_json::to_string(&response)?;
                         let connections_reader = connections.read().await;
-                        let recipient_tx = connections_reader
-                            .get(&recipient_id)
-                            .ok_or_else(|| anyhow!("no sender for given id"))?;
+                        let recipient_tx = connections_reader.get(&recipient_id).ok_or_else(|| anyhow!("no sender for given id"))?;
 
                         recipient_tx.send(Message::Text(response))?;
+                    }
+                    SignalMessage::Ping(is_host, recipient_id) => {
+                        if is_host {
+                            warn!("Received ping from user {:?}", recipient_id);
+                            pings.lock().unwrap().insert(recipient_id.clone(), Arc::new(Ping { host: true, responded: true }));
+                        }
                     }
                     _ => {}
                 }

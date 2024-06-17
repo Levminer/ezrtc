@@ -10,6 +10,7 @@ use crate::one_to_many;
 pub struct ServerState {
     one_to_many_connections: one_to_many::Connections,
     one_to_many_sessions: one_to_many::Sessions,
+    one_to_many_pings: one_to_many::Pings,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,6 +40,7 @@ async fn one_to_many_handler(State(state): State<ServerState>, ws: WebSocketUpgr
             socket,
             state.one_to_many_connections,
             state.one_to_many_sessions,
+            state.one_to_many_pings,
         )
     })
 }
