@@ -44,7 +44,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
     let pings2 = pings.clone();
 
     let task = tokio::task::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(10));
+        let mut interval = time::interval(Duration::from_secs(60));
 
         loop {
             interval.tick().await;
@@ -136,7 +136,16 @@ async fn user_message(sender_id: UserId, msg: Message, connections: &Connections
                                 }
                             }
                         } else if is_host && session.host.is_some() {
-                            error!("connecting user wants to be a host, but host is already present!");
+                            let connections2 = connections.clone();
+
+                            error!("connecting user wants to be a host, but host is already present, closing in 30s!");
+
+                            tokio::task::spawn(async move {
+                                let connections_reader2 = connections2.read().await;
+                                let host_tx = connections_reader2.get(&sender_id).expect("host not in connections");
+                                tokio::time::sleep(Duration::from_secs(30)).await;
+                                host_tx.send(Message::Close(None)).expect("failed to send close message to host");
+                            });
                         } else {
                             // connect new user with host
                             session.users.insert(sender_id);
