@@ -1,9 +1,10 @@
 use crate::protocol::{SessionId, UserId};
 use crate::socket::{DataChannelHandler, WSClient};
-use ezsockets::ClientConfig;
+use ezsockets::{ClientConfig, SocketConfig};
 use log::info;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::peer_connection::RTCPeerConnection;
@@ -26,6 +27,12 @@ impl EzRTCHost {
         let ice = ice_servers.clone();
 
         let config = ClientConfig::new(signaling_url);
+        let config = config.socket_config(SocketConfig {
+            heartbeat: Duration::from_secs(60),
+            timeout: Duration::from_secs(90),
+            ..SocketConfig::default()
+        });
+
         let (handle, future) = ezsockets::connect(
             |handle| WSClient {
                 handle,

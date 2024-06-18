@@ -1,6 +1,9 @@
 use crate::protocol::{IceCandidateJSON, SessionId, SignalMessage, UserId};
 use async_trait::async_trait;
+use ezsockets::client::ClientCloseMode;
+use ezsockets::CloseFrame;
 use ezsockets::Error;
+use ezsockets::WSError;
 use log::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -31,7 +34,7 @@ pub struct WSClient {
 }
 
 pub trait DataChannelHandler: Send + Sync {
-    fn handle_data_channel_open(&self);
+    fn handle_data_channel_open(&self, dc: Arc<RTCDataChannel>);
     fn handle_data_channel_message(&self, message: String);
 }
 
@@ -128,8 +131,10 @@ impl ezsockets::ClientExt for WSClient {
                         }));
 
                         let dc_handler = self.data_channel_handler.clone();
+                        let dc = Arc::clone(&data_channel);
                         data_channel.on_open(Box::new(move || {
-                            dc_handler.handle_data_channel_open();
+                            let dc2 = Arc::clone(&dc);
+                            dc_handler.handle_data_channel_open(dc2);
 
                             Box::pin(async move {})
                         }));
@@ -162,12 +167,12 @@ impl ezsockets::ClientExt for WSClient {
 
                     peer_connection.add_ice_candidate(candidate_init).await.unwrap();
                 }
-                // SignalMessage::Ping(_is_host, user_id) => {
-                //     let ping_message = SignalMessage::Ping(true, user_id);
-                //     self.handle.text(serde_json::to_string(&ping_message).unwrap()).unwrap();
+                SignalMessage::Ping(_is_host, user_id) => {
+                    let ping_message = SignalMessage::Ping(true, user_id);
+                    self.handle.text(serde_json::to_string(&ping_message).unwrap()).unwrap();
 
-                //     warn!("Sending pong to server");
-                // }
+                    info!("Sending pong to server");
+                }
                 _ => {}
             },
             Err(error) => {
@@ -184,6 +189,7 @@ impl ezsockets::ClientExt for WSClient {
     }
 
     async fn on_connect(&mut self) -> Result<(), Error> {
+        info!("Connected to server");
         let join_message = SignalMessage::SessionJoin(self.session_id.clone(), true);
 
         self.handle.text(serde_json::to_string(&join_message).unwrap()).unwrap();
@@ -192,5 +198,20 @@ impl ezsockets::ClientExt for WSClient {
 
     async fn on_call(&mut self, _call: Self::Call) -> Result<(), Error> {
         Ok(())
+    }
+
+    async fn on_connect_fail(&mut self, _error: WSError) -> Result<ClientCloseMode, Error> {
+        error!("Connection failed");
+        Ok(ClientCloseMode::Reconnect)
+    }
+
+    async fn on_close(&mut self, _frame: Option<CloseFrame>) -> Result<ClientCloseMode, Error> {
+        error!("Connection closed");
+        Ok(ClientCloseMode::Reconnect)
+    }
+
+    async fn on_disconnect(&mut self) -> Result<ClientCloseMode, Error> {
+        error!("Connection disconnected");
+        Ok(ClientCloseMode::Reconnect)
     }
 }
