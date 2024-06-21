@@ -1,6 +1,7 @@
 ﻿using SIPSorcery.Net;
-using System.Diagnostics;
+using System.Collections.Concurrent;
 using Websocket.Client;
+using WebSocketSharp;
 
 namespace ezrtc
 {
@@ -9,9 +10,10 @@ namespace ezrtc
 		public Uri hostURL;
 		public string sessionId;
 		public List<RTCIceServer> iceServers;
-		private Dictionary<string, RTCPeerConnection> peerConnections = new();
-		private Dictionary<string, RTCDataChannel> dataChannels = new();
-		public Action<RTCDataChannel>? onDataChannelOpen { get; set; }
+		private ConcurrentDictionary<string, RTCPeerConnection> peerConnections = new();
+		private ConcurrentDictionary<string, RTCDataChannel> dataChannels = new();
+		public Action<RTCDataChannel>? dataChannelOpen { get; set; }
+		public Action<string>? dataChannelMessage { get; set; }
 
 		public EzRTCHost(Uri hostURL, string sessionId, List<RTCIceServer>? iceServers = null)
 		{
@@ -22,82 +24,128 @@ namespace ezrtc
 
 		public void Start()
 		{
-			var exitEvent = new ManualResetEvent(false);
-			using var websocketClient = new WebsocketClient(hostURL);
-
-			websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(90);
-			websocketClient.ReconnectionHappened.Subscribe(info =>
+			using (var websocketClient = new WebsocketClient(hostURL))
 			{
-				Debug.WriteLine($"Connection changed: ${info.Type}");
-				var joinMessage = SignalMessage.SessionJoin.Encode(sessionId, true);
-				websocketClient.Send(joinMessage);
-			});
+				websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(90);
+				websocketClient.ReconnectionHappened.Subscribe(info =>
+				{
+					Console.WriteLine("Session joined");
+					Console.WriteLine($"Connection changed: ${info.Type}");
+					var joinMessage = SignalMessage.SessionJoin.Encode(sessionId, true);
+					websocketClient.Send(joinMessage);
+				});
 
-			RTCConfiguration config = new RTCConfiguration
+				websocketClient.MessageReceived.Subscribe(async msg =>
+				{
+					Console.WriteLine($"Message received: {msg}");
+
+					if (!msg.Text.IsNullOrEmpty())
+					{
+						if (msg.Text.Contains("SessionReady"))
+						{
+							await HandleSessionReady(msg, websocketClient);
+						}
+
+						if (msg.Text.Contains("SdpAnswer"))
+						{
+							await HandleSdpAnwser(msg, websocketClient);
+						}
+
+						if (msg.Text.Contains("IceCandidate"))
+						{
+							await HandleIceCandidate(msg, websocketClient);
+						}
+					}
+				});
+
+				websocketClient.Start();
+
+				while (true) { }
+			};
+		}
+
+		public async Task HandleSessionReady(ResponseMessage msg, WebsocketClient websocketClient)
+		{
+			var sessionReady = SignalMessage.SessionReady.Decode(msg.Text);
+
+			RTCConfiguration config = new()
 			{
 				iceServers = iceServers
 			};
 
-			websocketClient.MessageReceived.Subscribe(async msg =>
+			var peerConnection = new RTCPeerConnection(config);
+			peerConnections.TryAdd(sessionReady.userId, peerConnection);
+			var dataChannel = await peerConnection.createDataChannel("testing");
+			dataChannels.TryAdd(sessionReady.userId, dataChannel);
+
+			var offer = peerConnection.createOffer();
+			Console.WriteLine("Created offer");
+
+			await peerConnection.setLocalDescription(offer);
+			Console.WriteLine("Local description set");
+
+			var sdpOffer = SignalMessage.SdpOffer.Encode(sessionId, sessionReady.userId, peerConnection.localDescription.sdp.ToString());
+			websocketClient.Send(sdpOffer);
+		}
+
+		public async Task HandleSdpAnwser(ResponseMessage msg, WebsocketClient websocketClient)
+		{
+			var sdpAnswer = SignalMessage.SdpAnswer.Decode(msg.Text);
+			var peerConnection = peerConnections[sdpAnswer.userId];
+
+			var answer = new RTCSessionDescriptionInit
 			{
-				Debug.WriteLine($"Message received: {msg}");
+				type = RTCSdpType.answer,
+				sdp = sdpAnswer.answer
+			};
 
-				if (msg.Text.Contains("SessionReady"))
+			if (peerConnection != null && peerConnection.signalingState == RTCSignalingState.have_local_offer)
+			{
+				var res = peerConnection.setRemoteDescription(answer);
+
+				var dc = dataChannels[sdpAnswer.userId];
+
+				dc.onopen += () =>
 				{
-					var sessionReady = SignalMessage.SessionReady.Decode(msg.Text);
+					Console.WriteLine("Data channel open");
+					dataChannelOpen?.Invoke(dc);
+				};
 
-					var peerConnection = new RTCPeerConnection(config);
-					peerConnections.Add(sessionReady.userId, peerConnection);
-
-					var dataChannel = await peerConnection.createDataChannel($"send-{sessionReady.userId}");
-					dataChannels.Add(sessionReady.userId, dataChannel);
-					dataChannel.onopen += () =>
-					{
-						onDataChannelOpen?.Invoke(dataChannel);
-					};
-
-					var offer = peerConnection.createOffer();
-
-					await peerConnection.setLocalDescription(offer);
-
-					var sdpOffer = SignalMessage.SdpOffer.Encode(sessionId, sessionReady.userId, peerConnection.localDescription.sdp.ToString());
-					websocketClient.Send(sdpOffer);
-				}
-
-				if (msg.Text.Contains("SdpAnswer"))
+				dc.onclose += () =>
 				{
-					var sdpAnswer = SignalMessage.SdpAnswer.Decode(msg.Text);
-					var peerConnection = peerConnections[sdpAnswer.userId];
+					Console.WriteLine("Data channel closed");
+				};
 
-					var answer = new RTCSessionDescriptionInit
-					{
-						sdp = sdpAnswer.answer,
-						type = RTCSdpType.answer,
-					};
+				dc.onmessage += (dataCh, proto, msg) =>
+				{
+					var message = System.Text.Encoding.UTF8.GetString(msg);
+					Console.WriteLine($"Message received");
+					dataChannelMessage?.Invoke(message);
+				};
 
-					if (peerConnection != null && peerConnection.connectionState == RTCPeerConnectionState.@new)
-					{
-						var res = peerConnection.setRemoteDescription(answer);
+				peerConnection.onconnectionstatechange += (state) =>
+				{
+					Console.WriteLine($"STATE CHANGED => {state}");
+				};
+			}
+		}
 
-						peerConnection.onconnectionstatechange += (state) =>
-						{
-							Debug.WriteLine(state.ToString());
+		public async Task HandleIceCandidate(ResponseMessage msg, WebsocketClient websocketClient)
+		{
+			var incomingIceCandidate = SignalMessage.IceCandidate.Decode(msg.Text);
+			var peerConnection = peerConnections[incomingIceCandidate.userId];
 
-							if (state == RTCPeerConnectionState.failed || state == RTCPeerConnectionState.disconnected)
-							{
-								dataChannels[sdpAnswer.userId].close();
-								peerConnection.close();
+			var iceInit = new RTCIceCandidateInit
+			{
+				candidate = incomingIceCandidate.candidate.candidate,
+				sdpMid = incomingIceCandidate.candidate.sdpMid,
+				sdpMLineIndex = (ushort)incomingIceCandidate.candidate.sdpMLineIndex,
+				usernameFragment = incomingIceCandidate.candidate.usernameFragment,
+			};
 
-								peerConnections.Remove(sdpAnswer.userId);
-								dataChannels.Remove(sdpAnswer.userId);
-							}
-						};
-					}
-				}
-			});
+			peerConnection.addIceCandidate(iceInit);
 
-			websocketClient.Start();
-			exitEvent.WaitOne();
+			Console.WriteLine("Ice candidate added");
 		}
 
 		public void sendMessageToAll(string message)

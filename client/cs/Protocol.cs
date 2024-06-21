@@ -2,6 +2,14 @@
 
 namespace ezrtc
 {
+	public class ICandidate
+	{
+		public string candidate { get; set; }
+		public string sdpMid { get; set; }
+		public int sdpMLineIndex { get; set; }
+		public string usernameFragment { get; set; }
+	}
+
 	public class SignalMessage
 	{
 		public class SessionJoin
@@ -104,6 +112,34 @@ namespace ezrtc
 			{
 				var message = new { SdpAnswer = new object[] { sessionId, Convert.ToUInt32(userId), answer } };
 				return JsonSerializer.Serialize(message);
+			}
+		}
+
+		public class IceCandidate
+		{
+			public class IceCandidateInput
+			{
+				public object[] IceCandidate { get; set; }
+			}
+
+			public class IceCandidateOutput
+			{
+				public string sessionId;
+				public string userId;
+				public ICandidate candidate;
+			}
+
+			public static IceCandidateOutput Decode(string data)
+			{
+				var message = JsonSerializer.Deserialize<IceCandidateInput>(data);
+				object[] sdpOffer = message.IceCandidate;
+
+				return new IceCandidateOutput
+				{
+					sessionId = sdpOffer[0].ToString(),
+					userId = sdpOffer[1].ToString(),
+					candidate = JsonSerializer.Deserialize<ICandidate>(sdpOffer[2].ToString()),
+				};
 			}
 		}
 	}
