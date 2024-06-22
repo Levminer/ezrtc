@@ -8,7 +8,7 @@
     <Authors>Levminer</Authors>
     <PackageProjectUrl>https://github.com/Levminer/ezrtc</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Levminer/ezrtc</RepositoryUrl>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <Description>Easy cross-platform WebRTC communication</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
