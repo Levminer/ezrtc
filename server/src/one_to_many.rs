@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use axum::extract::ws::{Message, WebSocket};
+use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use ezrtc::protocol::{SessionId, SignalMessage, UserId};
 use futures_util::{SinkExt, StreamExt, TryFutureExt};
 use log::{error, info, warn};
@@ -43,7 +43,8 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
     let user_id2 = user_id.clone();
     let pings2 = pings.clone();
 
-    let task = tokio::task::spawn(async move {
+    // Ping client every 60 seconds
+    let ping_task = tokio::task::spawn(async move {
         let mut interval = time::interval(Duration::from_secs(60));
 
         loop {
@@ -54,6 +55,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
                 pings.get(&user_id2).cloned()
             };
 
+            // User is host
             if status.is_some() {
                 let ping = status.unwrap();
 
@@ -63,26 +65,27 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
                 } else if ping.host && ping.responded {
                     pings2.lock().unwrap().insert(user_id2.clone(), Arc::new(Ping { host: true, responded: false }));
                 }
+
+                info!("Sending ping to host: {:?}", user_id2);
             } else {
-                info!("user is not host {:?}", user_id2);
+                info!("Sending ping to user: {:?}", user_id2);
             }
 
-            info!("sending ping to user {:?}", user_id2);
             let response = SignalMessage::Ping(false, user_id2.clone());
             let response = serde_json::to_string(&response).unwrap();
             if let Err(e) = tx2.send(Message::Text(response)) {
-                error!("websocket ping error: {}", e);
+                error!("Websocket ping error: {}", e);
             }
         }
     });
 
-    tokio::task::spawn(async move {
+    let user_id_clone = user_id.clone();
+    let rx_task = tokio::task::spawn(async move {
         while let Some(message) = rx.next().await {
             user_ws_tx
                 .send(message)
                 .unwrap_or_else(|e| {
-                    error!("websocket send error: {}", e);
-                    task.abort();
+                    error!("Websocket send error: {:?} {}", user_id_clone, e);
                 })
                 .await;
         }
@@ -94,7 +97,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
         let msg = match result {
             Ok(msg) => msg,
             Err(e) => {
-                error!("websocket error (id={:?}): {}", user_id, e);
+                error!("Websocket error: {:?} {}", user_id, e);
                 break;
             }
         };
@@ -104,7 +107,9 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
         }
     }
 
-    error!("user disconnected: {:?}", user_id);
+    ping_task.abort();
+    rx_task.abort();
+    error!("User disconnected: {:?}", user_id);
     user_disconnected(user_id, &connections, &sessions).await;
 }
 
@@ -137,15 +142,30 @@ async fn user_message(sender_id: UserId, msg: Message, connections: &Connections
                             }
                         } else if is_host && session.host.is_some() {
                             let connections2 = connections.clone();
+                            let connections_reader2 = connections2.read().await;
 
-                            error!("connecting user wants to be a host, but host is already present, closing in 30s!");
+                            warn!("connecting user wants to be a host, but host is already present, closing previous host connection!");
 
-                            tokio::task::spawn(async move {
-                                let connections_reader2 = connections2.read().await;
-                                let host_tx = connections_reader2.get(&sender_id).expect("host not in connections");
-                                tokio::time::sleep(Duration::from_secs(30)).await;
-                                host_tx.send(Message::Close(None)).expect("failed to send close message to host");
-                            });
+                            let prev_host_user_id = session.host.expect("host not present");
+                            let prev_host_tx = connections_reader2.get(&prev_host_user_id);
+                            if let Some(prev_host_tx) = prev_host_tx {
+                                prev_host_tx
+                                    .send(Message::Close(Some(CloseFrame {
+                                        code: 3001,
+                                        reason: "Multiple hosts".into(),
+                                    })))
+                                    .expect("failed to send close message to host");
+                            }
+
+                            let new_host_tx = connections_reader2.get(&sender_id);
+                            if let Some(new_host_tx) = new_host_tx {
+                                new_host_tx
+                                    .send(Message::Close(Some(CloseFrame {
+                                        code: 3001,
+                                        reason: "Multiple hosts".into(),
+                                    })))
+                                    .expect("failed to send close message to host");
+                            }
                         } else {
                             // connect new user with host
                             session.users.insert(sender_id);
@@ -198,7 +218,7 @@ async fn user_message(sender_id: UserId, msg: Message, connections: &Connections
                 }
             }
             Err(error) => {
-                error!("An error occurred: {:?}", error);
+                error!("An error occurred: {:?} {:?}", error, msg);
             }
         }
     }
