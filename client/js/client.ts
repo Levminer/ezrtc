@@ -91,16 +91,6 @@ export class EzRTCClient {
 
 					this.peerConnection.onconnectionstatechange = (state) => {
 						console.log("State changed", state.currentTarget)
-
-						// @ts-ignore
-						if (state.currentTarget.connectionState === "failed" || state.currentTarget.connectionState === "disconnected") {
-							this.dataChannel?.close()
-							this.peerConnection?.close()
-
-							this.peerConnection = new RTCPeerConnection({
-								iceServers: iceServers,
-							})
-						}
 					}
 				}
 			}
