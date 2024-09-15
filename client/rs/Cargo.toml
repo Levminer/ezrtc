@@ -18,5 +18,5 @@ serde_json = "1.0"
 webrtc = "0.10.1"
 log = "0.4.21"
 simplelog = "0.12.2"
-ezsockets = { version = "0.6.2", features = ["rustls"] }
+ezsockets = { version = "0.6.4", features = ["rustls"] }
 async-trait = "0.1.52"

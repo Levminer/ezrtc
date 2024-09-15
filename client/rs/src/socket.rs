@@ -205,8 +205,8 @@ impl ezsockets::ClientExt for WSClient {
         Ok(ClientCloseMode::Reconnect)
     }
 
-    async fn on_close(&mut self, _frame: Option<CloseFrame>) -> Result<ClientCloseMode, Error> {
-        error!("Connection closed");
+    async fn on_close(&mut self, frame: Option<CloseFrame>) -> Result<ClientCloseMode, Error> {
+        error!("Connection closed: {:?}", frame);
         Ok(ClientCloseMode::Reconnect)
     }
 

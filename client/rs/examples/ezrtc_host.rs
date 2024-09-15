@@ -1,10 +1,3 @@
-# ezrtc
-
--   Easy cross-platform WebRTC communication with data channels and a simple signaling server.
-
-## Host usage
-
-```rust
 use ezrtc::{host::EzRTCHost, socket::DataChannelHandler};
 use log::{info, LevelFilter};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
@@ -64,4 +57,3 @@ pub async fn main() {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
 }
-```
