@@ -1,4 +1,5 @@
-﻿using SIPSorcery.Net;
+﻿using Serilog;
+using SIPSorcery.Net;
 using System.Collections.Concurrent;
 using Websocket.Client;
 using WebSocketSharp;
@@ -12,6 +13,7 @@ namespace ezrtc
 		public List<RTCIceServer> iceServers;
 		private ConcurrentDictionary<string, RTCPeerConnection> peerConnections = new();
 		private ConcurrentDictionary<string, RTCDataChannel> dataChannels = new();
+		public ManualResetEvent exitEvent = new(false);
 		public Action<RTCDataChannel>? dataChannelOpen { get; set; }
 		public Action<string>? dataChannelMessage { get; set; }
 
@@ -26,18 +28,18 @@ namespace ezrtc
 		{
 			using (var websocketClient = new WebsocketClient(hostURL))
 			{
-				websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(90);
+				websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(70);
 				websocketClient.ReconnectionHappened.Subscribe(info =>
 				{
-					Console.WriteLine("Session joined");
-					Console.WriteLine($"Connection changed: ${info.Type}");
+					Log.Information("Session joined");
+					Log.Warning($"Connection changed: {info.Type}");
 					var joinMessage = SignalMessage.SessionJoin.Encode(sessionId, true);
 					websocketClient.Send(joinMessage);
 				});
 
 				websocketClient.MessageReceived.Subscribe(async msg =>
 				{
-					Console.WriteLine($"Message received: {msg}");
+					Log.Information($"Message received: {msg}");
 
 					if (!msg.Text.IsNullOrEmpty())
 					{
@@ -48,7 +50,7 @@ namespace ezrtc
 
 						if (msg.Text.Contains("SdpAnswer"))
 						{
-							await HandleSdpAnwser(msg, websocketClient);
+							await HandleSdpAnswer(msg, websocketClient);
 						}
 
 						if (msg.Text.Contains("IceCandidate"))
@@ -59,12 +61,11 @@ namespace ezrtc
 				});
 
 				websocketClient.Start();
-
-				while (true) { }
+				exitEvent.WaitOne();
 			};
 		}
 
-		public async Task HandleSessionReady(ResponseMessage msg, WebsocketClient websocketClient)
+		private async Task HandleSessionReady(ResponseMessage msg, WebsocketClient websocketClient)
 		{
 			var sessionReady = SignalMessage.SessionReady.Decode(msg.Text);
 
@@ -79,16 +80,16 @@ namespace ezrtc
 			dataChannels.TryAdd(sessionReady.userId, dataChannel);
 
 			var offer = peerConnection.createOffer();
-			Console.WriteLine("Created offer");
+			Log.Information("Created offer");
 
 			await peerConnection.setLocalDescription(offer);
-			Console.WriteLine("Local description set");
+			Log.Information("Local description set");
 
 			var sdpOffer = SignalMessage.SdpOffer.Encode(sessionId, sessionReady.userId, peerConnection.localDescription.sdp.ToString());
 			websocketClient.Send(sdpOffer);
 		}
 
-		public async Task HandleSdpAnwser(ResponseMessage msg, WebsocketClient websocketClient)
+		private async Task HandleSdpAnswer(ResponseMessage msg, WebsocketClient websocketClient)
 		{
 			var sdpAnswer = SignalMessage.SdpAnswer.Decode(msg.Text);
 			var peerConnection = peerConnections[sdpAnswer.userId];
@@ -107,30 +108,39 @@ namespace ezrtc
 
 				dc.onopen += () =>
 				{
-					Console.WriteLine("Data channel open");
+					Log.Information("Data channel open");
 					dataChannelOpen?.Invoke(dc);
 				};
 
 				dc.onclose += () =>
 				{
-					Console.WriteLine("Data channel closed");
+					Log.Information("Data channel closed");
 				};
 
 				dc.onmessage += (dataCh, proto, msg) =>
 				{
+					Log.Information($"Message received");
 					var message = System.Text.Encoding.UTF8.GetString(msg);
-					Console.WriteLine($"Message received");
 					dataChannelMessage?.Invoke(message);
 				};
 
 				peerConnection.onconnectionstatechange += (state) =>
 				{
-					Console.WriteLine($"STATE CHANGED => {state}");
+					Log.Information($"STATE CHANGED => {state}");
+
+					if (state == RTCPeerConnectionState.failed)
+					{
+						dataChannels[sdpAnswer.userId].close();
+						peerConnection.close();
+
+						peerConnections.TryRemove(sdpAnswer.userId, out _);
+						dataChannels.TryRemove(sdpAnswer.userId, out _);
+					}
 				};
 			}
 		}
 
-		public async Task HandleIceCandidate(ResponseMessage msg, WebsocketClient websocketClient)
+		private async Task HandleIceCandidate(ResponseMessage msg, WebsocketClient websocketClient)
 		{
 			var incomingIceCandidate = SignalMessage.IceCandidate.Decode(msg.Text);
 			var peerConnection = peerConnections[incomingIceCandidate.userId];
@@ -145,9 +155,21 @@ namespace ezrtc
 
 			peerConnection.addIceCandidate(iceInit);
 
-			Console.WriteLine("Ice candidate added");
+			Log.Information("Ice candidate added");
 		}
 
+		// Send message to a specific user
+		public void SendMessage(string message, string userId)
+		{
+			var dataChannel = dataChannels[userId];
+
+			if (dataChannel != null && dataChannel.readyState == RTCDataChannelState.open)
+			{
+				dataChannel.send(message);
+			}
+		}
+
+		// Send a message to all users.
 		public void sendMessageToAll(string message)
 		{
 			foreach (KeyValuePair<string, RTCDataChannel> entry in dataChannels)
