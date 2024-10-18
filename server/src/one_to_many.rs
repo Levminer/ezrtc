@@ -1,8 +1,9 @@
 use anyhow::anyhow;
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use ezrtc::protocol::{SessionId, SignalMessage, UserId};
-use futures_util::{SinkExt, StreamExt, TryFutureExt};
+use futures_util::{SinkExt, StreamExt};
 use log::{error, info, warn};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -33,18 +34,18 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
     let user_id = UserId::new(NEXT_USER_ID.fetch_add(1, Ordering::Relaxed));
     info!("new user connected: {:?}", user_id);
 
-    let (mut user_ws_tx, mut user_ws_rx) = ws.split();
+    let (mut ws_send, mut ws_recv) = ws.split();
 
-    // creates a new ws because ws cant be cloned directly
+    // Create a channel for sending and receiving ws messages
     let (tx, rx) = mpsc::unbounded_channel();
     let mut rx = UnboundedReceiverStream::new(rx);
 
+    // Ping client every 60 seconds
     let tx2 = tx.clone();
     let user_id2 = user_id.clone();
     let pings2 = pings.clone();
 
-    // Ping client every 60 seconds
-    let ping_task = tokio::task::spawn(async move {
+    let mut ping_task = tokio::spawn(async move {
         let mut interval = time::interval(Duration::from_secs(60));
 
         loop {
@@ -79,36 +80,77 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
         }
     });
 
-    let user_id_clone = user_id.clone();
-    let rx_task = tokio::task::spawn(async move {
+    // Send messages to websocket from channel
+    let mut send_task = tokio::spawn(async move {
         while let Some(message) = rx.next().await {
-            user_ws_tx
-                .send(message)
-                .unwrap_or_else(|e| {
-                    error!("Websocket send error: {:?} {}", user_id_clone, e);
-                })
-                .await;
+            if ws_send.send(message).await.is_err() {
+                break;
+            }
+        }
+
+        match ws_send
+            .send(Message::Close(Some(CloseFrame {
+                code: axum::extract::ws::close_code::NORMAL,
+                reason: Cow::from("Goodbye"),
+            })))
+            .await
+        {
+            Ok(_) => info!("Sent close to {user_id}"),
+            Err(e) => info!("Failed to close: {e}"),
+        }
+    });
+
+    // Receive messages from websocket
+    let connections2 = connections.clone();
+    let sessions2 = sessions.clone();
+    let pings2 = pings.clone();
+
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(msg) = ws_recv.next().await {
+            match msg {
+                Ok(msg) => {
+                    if let Err(err) = user_message(user_id, msg, &connections2, &sessions2, &pings2).await {
+                        error!("error while handling user message: {}", err);
+                    }
+                }
+                Err(e) => {
+                    error!("Websocket error: {:?} {}", user_id, e);
+                    break;
+                }
+            }
         }
     });
 
     connections.write().await.insert(user_id, tx);
 
-    while let Some(result) = user_ws_rx.next().await {
-        let msg = match result {
-            Ok(msg) => msg,
-            Err(e) => {
-                error!("Websocket error: {:?} {}", user_id, e);
-                break;
+    // Run all tasks and abort if any of them fails
+    tokio::select! {
+        t1 = (&mut send_task) => {
+            match t1 {
+                Ok(_) => info!("Sender task stopped"),
+                Err(a) => info!("Error sending messages {a:?}")
             }
-        };
-
-        if let Err(err) = user_message(user_id, msg, &connections, &sessions, &pings).await {
-            error!("error while handling user message: {}", err);
+            recv_task.abort();
+            ping_task.abort();
+        },
+        t2 = (&mut recv_task) => {
+            match t2 {
+                Ok(_) => info!("Receiver task stopped"),
+                Err(b) => info!("Error receiving messages {b:?}")
+            }
+            send_task.abort();
+            ping_task.abort();
+        }
+        t3 = (&mut ping_task) => {
+            match t3 {
+                Ok(_) => info!("Ping task stopped"),
+                Err(c) => info!("Error pinging {c:?}")
+            }
+            send_task.abort();
+            recv_task.abort();
         }
     }
 
-    ping_task.abort();
-    rx_task.abort();
     error!("User disconnected: {:?}", user_id);
     user_disconnected(user_id, &connections, &sessions).await;
 }
