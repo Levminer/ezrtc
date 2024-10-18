@@ -20,4 +20,4 @@ tokio-stream = "0.1.8"
 simplelog = "0.12.0"
 log = "0.4.8"
 anyhow = "1"
-axum = { version = "0.6.18", features = ["ws", "macros", "json"] }
+axum = { version = "0.7.5", features = ["ws", "macros", "json"] }
