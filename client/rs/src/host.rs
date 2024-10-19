@@ -1,5 +1,5 @@
 use crate::protocol::{SessionId, UserId};
-use crate::socket::{DataChannelHandler, WSClient};
+use crate::socket::{DataChannelHandler, WSHost};
 use ezsockets::{ClientConfig, SocketConfig};
 use log::info;
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ pub struct EzRTCHost {
     pub peer_connections: Arc<Mutex<HashMap<UserId, Arc<RTCPeerConnection>>>>,
     pub data_channels: Arc<Mutex<HashMap<UserId, Arc<RTCDataChannel>>>>,
     pub ice_servers: Vec<RTCIceServer>,
-    pub handle: ezsockets::Client<WSClient>,
+    pub handle: ezsockets::Client<WSHost>,
 }
 
 impl EzRTCHost {
@@ -34,7 +34,7 @@ impl EzRTCHost {
         });
 
         let (handle, future) = ezsockets::connect(
-            |handle| WSClient {
+            |handle| WSHost {
                 handle,
                 session_id: SessionId::new(session_id),
                 data_channels: dc,

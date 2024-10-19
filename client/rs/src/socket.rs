@@ -13,6 +13,7 @@ use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_state::RTCDataChannelState;
 use webrtc::data_channel::RTCDataChannel;
+use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
@@ -24,10 +25,18 @@ use webrtc::peer_connection::RTCPeerConnection;
 
 pub enum WSCall {}
 
-pub struct WSClient {
+pub struct WSHost {
     pub session_id: SessionId,
     pub peer_connections: Arc<Mutex<HashMap<UserId, Arc<RTCPeerConnection>>>>,
     pub data_channels: Arc<Mutex<HashMap<UserId, Arc<RTCDataChannel>>>>,
+    pub ice_servers: Vec<RTCIceServer>,
+    pub handle: ezsockets::Client<Self>,
+    pub data_channel_handler: Arc<Box<dyn DataChannelHandler>>,
+}
+
+pub struct WSClient {
+    pub session_id: SessionId,
+    pub peer_connection: Arc<Mutex<Arc<RTCPeerConnection>>>,
     pub ice_servers: Vec<RTCIceServer>,
     pub handle: ezsockets::Client<Self>,
     pub data_channel_handler: Arc<Box<dyn DataChannelHandler>>,
@@ -39,7 +48,7 @@ pub trait DataChannelHandler: Send + Sync {
 }
 
 #[async_trait]
-impl ezsockets::ClientExt for WSClient {
+impl ezsockets::ClientExt for WSHost {
     type Call = WSCall;
 
     async fn on_text(&mut self, text: String) -> Result<(), Error> {
@@ -106,6 +115,7 @@ impl ezsockets::ClientExt for WSClient {
                             let dcs = Arc::clone(&dcs);
                             let pcs = Arc::clone(&pcs);
                             match state {
+                                // TODO Check for other states, web disconnects don't always register
                                 RTCPeerConnectionState::Disconnected => {
                                     tokio::spawn(async move {
                                         pc2.close().await.unwrap();
@@ -191,6 +201,102 @@ impl ezsockets::ClientExt for WSClient {
     async fn on_connect(&mut self) -> Result<(), Error> {
         info!("Connected to server");
         let join_message = SignalMessage::SessionJoin(self.session_id.clone(), true);
+
+        self.handle.text(serde_json::to_string(&join_message).unwrap()).unwrap();
+        Ok(())
+    }
+
+    async fn on_call(&mut self, _call: Self::Call) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn on_connect_fail(&mut self, _error: WSError) -> Result<ClientCloseMode, Error> {
+        error!("Connection failed");
+        Ok(ClientCloseMode::Reconnect)
+    }
+
+    async fn on_close(&mut self, frame: Option<CloseFrame>) -> Result<ClientCloseMode, Error> {
+        error!("Connection closed: {:?}", frame);
+        Ok(ClientCloseMode::Reconnect)
+    }
+
+    async fn on_disconnect(&mut self) -> Result<ClientCloseMode, Error> {
+        error!("Connection disconnected");
+        Ok(ClientCloseMode::Reconnect)
+    }
+}
+
+#[async_trait]
+impl ezsockets::ClientExt for WSClient {
+    type Call = WSCall;
+
+    async fn on_text(&mut self, text: String) -> Result<(), Error> {
+        info!("Message received from signaling server: {:?}", text);
+
+        match serde_json::from_str::<SignalMessage>(&text) {
+            Ok(request) => match request {
+                SignalMessage::SdpOffer(session_id, user_id, sdp_offer) => {
+                    let peer_connection = self.peer_connection.lock().unwrap().clone();
+
+                    let offer = RTCSessionDescription::offer(sdp_offer).unwrap();
+
+                    peer_connection.set_remote_description(offer).await.unwrap();
+
+                    let answer = peer_connection.create_answer(None).await.unwrap();
+
+                    peer_connection.set_local_description(answer.clone()).await.unwrap();
+
+                    info!("Remote description set");
+
+                    let pc = Arc::downgrade(&peer_connection);
+                    let hndl = self.handle.clone();
+
+                    peer_connection.on_ice_candidate(Box::new(move |candidate: Option<RTCIceCandidate>| {
+                        info!("Ica candidate received: {:?}", candidate);
+
+                        let pc2 = pc.clone();
+                        let session_id2 = session_id.clone();
+                        let hndl2 = hndl.clone();
+
+                        Box::pin(async move {
+                            if let Some(c) = candidate {
+                                if let Some(pc) = pc2.upgrade() {
+                                    let ld = pc.local_description().await.unwrap();
+
+                                    info!("sending answer {c}");
+
+                                    hndl2.text(serde_json::to_string(&SignalMessage::SdpAnswer(session_id2, user_id, ld.sdp)).unwrap()).unwrap();
+
+                                    // TODO send ice candidate
+                                }
+                            }
+                        })
+                    }));
+                }
+                // SignalMessage::Ping(_is_host, user_id) => {
+                //     let ping_message = SignalMessage::Ping(true, user_id);
+                //     self.handle.text(serde_json::to_string(&ping_message).unwrap()).unwrap();
+
+                //     info!("Sending pong to server");
+                // }
+                _ => {}
+            },
+            Err(error) => {
+                error!("Error parsing message from server: {:?}", error);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn on_binary(&mut self, bytes: Vec<u8>) -> Result<(), Error> {
+        info!("received bytes: {bytes:?}");
+        Ok(())
+    }
+
+    async fn on_connect(&mut self) -> Result<(), Error> {
+        info!("Connected to server");
+        let join_message = SignalMessage::SessionJoin(self.session_id.clone(), false);
 
         self.handle.text(serde_json::to_string(&join_message).unwrap()).unwrap();
         Ok(())
