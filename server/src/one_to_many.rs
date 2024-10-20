@@ -20,7 +20,6 @@ pub struct Session {
 
 #[derive(Default, Debug)]
 pub struct Ping {
-    pub host: bool,
     pub responded: bool,
 }
 
@@ -56,26 +55,22 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
                 pings.get(&user_id2).cloned()
             };
 
-            // User is host
-            if status.is_some() {
-                let ping = status.unwrap();
-
-                if ping.host && !ping.responded {
-                    tx2.send(Message::Close(None)).unwrap();
+            if let Some(ping) = status {
+                if ping.responded {
+                    pings2.lock().unwrap().insert(user_id2.clone(), Arc::new(Ping { responded: false }));
+                } else {
                     error!("User failed to respond, closing connection: {:?}", user_id2);
-                } else if ping.host && ping.responded {
-                    pings2.lock().unwrap().insert(user_id2.clone(), Arc::new(Ping { host: true, responded: false }));
+                    break;
                 }
-
-                info!("Sending ping to host: {:?}", user_id2);
-            } else {
-                info!("Sending ping to user: {:?}", user_id2);
             }
 
-            let response = SignalMessage::Ping(false, user_id2.clone());
+            warn!("Sending ping to user: {:?}", user_id2);
+
+            let response = SignalMessage::Ping(true, user_id2.clone());
             let response = serde_json::to_string(&response).unwrap();
             if let Err(e) = tx2.send(Message::Text(response)) {
                 error!("Websocket ping error: {}", e);
+                break;
             }
         }
     });
@@ -183,31 +178,26 @@ async fn user_message(sender_id: UserId, msg: Message, connections: &Connections
                                 }
                             }
                         } else if is_host && session.host.is_some() {
+                            warn!("connecting user wants to be a host, but host is already present, closing connection soon");
+
                             let connections2 = connections.clone();
-                            let connections_reader2 = connections2.read().await;
 
-                            warn!("connecting user wants to be a host, but host is already present, closing previous host connection!");
+                            tokio::task::spawn(async move {
+                                let new_host_tx = {
+                                    let connections_reader2 = connections2.read().await;
+                                    connections_reader2.get(&sender_id).cloned()
+                                };
 
-                            let prev_host_user_id = session.host.expect("host not present");
-                            let prev_host_tx = connections_reader2.get(&prev_host_user_id);
-                            if let Some(prev_host_tx) = prev_host_tx {
-                                prev_host_tx
-                                    .send(Message::Close(Some(CloseFrame {
-                                        code: 3001,
-                                        reason: "Multiple hosts".into(),
-                                    })))
-                                    .expect("failed to send close message to host");
-                            }
-
-                            let new_host_tx = connections_reader2.get(&sender_id);
-                            if let Some(new_host_tx) = new_host_tx {
-                                new_host_tx
-                                    .send(Message::Close(Some(CloseFrame {
-                                        code: 3001,
-                                        reason: "Multiple hosts".into(),
-                                    })))
-                                    .expect("failed to send close message to host");
-                            }
+                                tokio::time::sleep(Duration::from_secs(60)).await;
+                                if let Some(new_host_tx) = new_host_tx {
+                                    new_host_tx
+                                        .send(Message::Close(Some(CloseFrame {
+                                            code: 3001,
+                                            reason: "Multiple hosts".into(),
+                                        })))
+                                        .expect("failed to send close message to host");
+                                }
+                            });
                         } else {
                             // connect new user with host
                             session.users.insert(sender_id);
@@ -253,7 +243,7 @@ async fn user_message(sender_id: UserId, msg: Message, connections: &Connections
                     SignalMessage::Ping(is_host, recipient_id) => {
                         if is_host {
                             warn!("Received ping from user {:?}", recipient_id);
-                            pings.lock().unwrap().insert(recipient_id.clone(), Arc::new(Ping { host: true, responded: true }));
+                            pings.lock().unwrap().insert(recipient_id.clone(), Arc::new(Ping { responded: true }));
                         }
                     }
                     _ => {}
