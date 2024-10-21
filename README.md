@@ -1,10 +1,10 @@
 # ezrtc
 
 -   Easy cross-platform WebRTC communication with data channels and a simple signaling server.
--   Currently supports: JavaScript/TypeScript, Rust.
+-   Currently supports: JavaScript/TypeScript, Rust and C#.
 
 > [!WARNING]
-> Ezrtc is currently unstable and not recommended for production use. The API is subject to change.
+> ezrtc is currently unstable and not recommended for production use. The API is subject to change.
 
 ## Client
 
@@ -12,39 +12,14 @@
 
 [![NPM Version](<https://img.shields.io/npm/v/ezrtc?label=Client%20(npm)>)](https://www.npmjs.com/package/ezrtc)
 [![Crates.io Version](<https://img.shields.io/crates/v/ezrtc?label=Client%20(crates)>)](https://crates.io/crates/ezrtc)
-
-### JS/TS
-
--   Install the package using [npm](https://www.npmjs.com/package/ezrtc): `npm i ezrtc`
--   Example usage:
-
-```js
-// Host
-import { EzRTCHost } from "ezrtc"
-
-let host = new EzRTCHost("wss://test.levminer.com/one-to-many", "random_session_id")
-
-setInterval(() => {
-	host.sendMessageToAll("test message")
-}, 1000)
-
-// Client
-import { EzRTCClient } from "ezrtc"
-
-let client = new EzRTCClient("wss://test.levminer.com/one-to-many", "random_session_id")
-
-client.onMessage((message) => {
-	console.log(message) // "test message"
-})
-```
+![NuGet Version](<https://img.shields.io/nuget/v/ezrtc?label=Client%20(NuGet)>)
 
 ## Server
 
-[![Crates.io Version](<https://img.shields.io/crates/v/ezrtc-server?label=Server%20(Crates)>)](https://crates.io/crates/ezrtc-server)
-[![Docker Image Version](https://img.shields.io/docker/v/levminer/ezrtc-server?label=Server%20(Docker%20Hub))](https://hub.docker.com/r/levminer/ezrtc-server)
-
-
 -   A simple signaling server that allows multiple clients to connect to each other and exchange data using WebSockets.
+
+[![Crates.io Version](<https://img.shields.io/crates/v/ezrtc-server?label=Server%20(crates)>)](https://crates.io/crates/ezrtc-server)
+[![Docker Image Version](<https://img.shields.io/docker/v/levminer/ezrtc-server?label=Server%20(Docker%20Hub)>)](https://hub.docker.com/r/levminer/ezrtc-server)
 
 ## Credits
 

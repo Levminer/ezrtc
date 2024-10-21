@@ -2,66 +2,9 @@
 
 -   Easy cross-platform WebRTC communication with data channels and a simple signaling server.
 
-## Host usage
+## Example
 
-```rust
-use ezrtc::{host::EzRTCHost, socket::DataChannelHandler};
-use log::{info, LevelFilter};
-use simplelog::{ColorChoice, TermLogger, TerminalMode};
-use std::sync::Arc;
-use webrtc::{
-    data_channel::{data_channel_state::RTCDataChannelState, RTCDataChannel},
-    ice_transport::ice_server::RTCIceServer,
-};
+1. R
+1. Host example: `cargo r --example ezrtc_host`
+1. Client example: `cargo r --example ezrtc_client`
 
-#[tokio::main]
-pub async fn main() {
-    TermLogger::init(LevelFilter::Info, Default::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
-
-    // Define your STUN and TURN servers here
-    let ice_servers = vec![RTCIceServer {
-        urls: vec!["stun:stun.cloudflare.com:3478".to_owned()],
-        ..Default::default()
-    }];
-
-    // Define your data channel handler
-    struct MyDataChannelHandler {}
-
-    impl DataChannelHandler for MyDataChannelHandler {
-        fn handle_data_channel_open(&self, dc: Arc<RTCDataChannel>) {
-            info!("Data channel opened!");
-
-            tokio::spawn(async move {
-                // Send a message every 3 seconds to connected clients
-                loop {
-                    if dc.ready_state() == RTCDataChannelState::Open {
-                        dc.send_text("test".to_string()).await.unwrap();
-                    }
-
-                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                }
-            });
-        }
-
-        fn handle_data_channel_message(&self, message: String) {
-            info!("Data channel message received: {:?}", message);
-        }
-    }
-
-    // Start the connection
-    let host = EzRTCHost::new(
-        "ws://localhost:9001/one-to-many".to_string(), // ezrtc-server address
-        "random_session_id".to_string(),
-        ice_servers,
-        Arc::new(Box::new(MyDataChannelHandler {})),
-    )
-    .await;
-
-    // Log connected clients number every 5 seconds
-    loop {
-        info!("Connected clients: {:?}", host.peer_connections.lock().unwrap().len());
-
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    }
-}
-```
