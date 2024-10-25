@@ -177,8 +177,8 @@ impl ezsockets::ClientExt for WSHost {
 
                     peer_connection.add_ice_candidate(candidate_init).await.unwrap();
                 }
-                SignalMessage::Ping(_is_host, user_id) => {
-                    let ping_message = SignalMessage::Ping(true, user_id);
+                SignalMessage::Ping(_is_host, user_id, _session_id) => {
+                    let ping_message = SignalMessage::Ping(true, user_id, Some(self.session_id.clone()));
                     self.handle.text(serde_json::to_string(&ping_message).unwrap()).unwrap();
 
                     info!("Sending pong to server");

@@ -107,5 +107,5 @@ pub enum SignalMessage {
     Error(SessionId, UserId, String),
 
     /// Ping message
-    Ping(bool, UserId),
+    Ping(bool, UserId, Option<SessionId>),
 }

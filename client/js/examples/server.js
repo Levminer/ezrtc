@@ -7,10 +7,6 @@ document.querySelector("#connect").addEventListener("click", () => {
 		},
 	])
 
-	host.onMessage((message) => {
-		console.log("message received", message)
-	})
-
 	setInterval(() => {
 		host.sendMessageToAll("test")
 	}, 1000)

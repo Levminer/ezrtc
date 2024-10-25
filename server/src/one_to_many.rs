@@ -20,7 +20,8 @@ pub struct Session {
 
 #[derive(Default, Debug)]
 pub struct Ping {
-    pub responded: bool,
+    pub online: bool,
+    pub session_id: Option<SessionId>,
 }
 
 pub type Connections = Arc<RwLock<HashMap<UserId, mpsc::UnboundedSender<Message>>>>;
@@ -56,8 +57,14 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
             };
 
             if let Some(ping) = status {
-                if ping.responded {
-                    pings2.lock().unwrap().insert(user_id2.clone(), Arc::new(Ping { responded: false }));
+                if ping.online {
+                    pings2.lock().unwrap().insert(
+                        user_id2.clone(),
+                        Arc::new(Ping {
+                            online: false,
+                            session_id: ping.session_id.clone(),
+                        }),
+                    );
                 } else {
                     error!("User failed to respond, closing connection: {:?}", user_id2);
                     break;
@@ -66,7 +73,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
 
             warn!("Sending ping to user: {:?}", user_id2);
 
-            let response = SignalMessage::Ping(true, user_id2.clone());
+            let response = SignalMessage::Ping(true, user_id2.clone(), None);
             let response = serde_json::to_string(&response).unwrap();
             if let Err(e) = tx2.send(Message::Text(response)) {
                 error!("Websocket ping error: {}", e);
@@ -147,6 +154,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
     }
 
     error!("User disconnected: {:?}", user_id);
+    pings.lock().unwrap().remove(&user_id);
     user_disconnected(user_id, &connections, &sessions).await;
 }
 
@@ -240,10 +248,10 @@ async fn user_message(sender_id: UserId, msg: Message, connections: &Connections
 
                         recipient_tx.send(Message::Text(response))?;
                     }
-                    SignalMessage::Ping(is_host, recipient_id) => {
+                    SignalMessage::Ping(is_host, recipient_id, session_id) => {
                         if is_host {
                             warn!("Received ping from user {:?}", recipient_id);
-                            pings.lock().unwrap().insert(recipient_id.clone(), Arc::new(Ping { responded: true }));
+                            pings.lock().unwrap().insert(recipient_id.clone(), Arc::new(Ping { online: true, session_id }));
                         }
                     }
                     _ => {}
