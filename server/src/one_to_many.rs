@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
-use ezrtc::protocol::{SessionId, SignalMessage, UserId};
+use ezrtc::protocol::{SessionId, SignalMessage, Status, UserId};
 use futures_util::{SinkExt, StreamExt};
 use log::{error, info, warn};
 use std::borrow::Cow;
@@ -73,7 +73,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
 
             warn!("Sending ping to user: {:?}", user_id2);
 
-            let response = SignalMessage::Ping(true, user_id2.clone(), None);
+            let response = SignalMessage::KeepAlive(user_id2.clone(), Status::default());
             let response = serde_json::to_string(&response).unwrap();
             if let Err(e) = tx2.send(Message::Text(response)) {
                 error!("Websocket ping error: {}", e);
@@ -248,10 +248,10 @@ async fn user_message(sender_id: UserId, msg: Message, connections: &Connections
 
                         recipient_tx.send(Message::Text(response))?;
                     }
-                    SignalMessage::Ping(is_host, recipient_id, session_id) => {
-                        if is_host {
-                            warn!("Received ping from user {:?}", recipient_id);
-                            pings.lock().unwrap().insert(recipient_id.clone(), Arc::new(Ping { online: true, session_id }));
+                    SignalMessage::KeepAlive(user_id, status) => {
+                        if status.is_host.is_some() {
+                            warn!("Received ping from user {:?}", status.session_id);
+                            pings.lock().unwrap().insert(user_id, Arc::new(Ping { online: true, session_id: status.session_id }));
                         }
                     }
                     _ => {}

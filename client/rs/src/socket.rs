@@ -1,3 +1,4 @@
+use crate::protocol::Status;
 use crate::protocol::{IceCandidateJSON, SessionId, SignalMessage, UserId};
 use async_trait::async_trait;
 use ezsockets::client::ClientCloseMode;
@@ -177,8 +178,15 @@ impl ezsockets::ClientExt for WSHost {
 
                     peer_connection.add_ice_candidate(candidate_init).await.unwrap();
                 }
-                SignalMessage::Ping(_is_host, user_id, _session_id) => {
-                    let ping_message = SignalMessage::Ping(true, user_id, Some(self.session_id.clone()));
+                SignalMessage::KeepAlive(user_id, _status) => {
+                    let ping_message = SignalMessage::KeepAlive(
+                        user_id,
+                        Status {
+                            session_id: Some(self.session_id.clone()),
+                            is_host: Some(true),
+                            version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                        },
+                    );
                     self.handle.text(serde_json::to_string(&ping_message).unwrap()).unwrap();
 
                     info!("Sending pong to server");

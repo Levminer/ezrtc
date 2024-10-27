@@ -71,6 +71,24 @@ impl Display for UserId {
 /// and which will await it.
 pub type IsHost = bool;
 
+/// Status of the user
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct Status {
+    pub session_id: Option<SessionId>,
+    pub is_host: Option<IsHost>,
+    pub version: Option<String>,
+}
+
+impl Default for Status {
+    fn default() -> Self {
+        Self {
+            session_id: None,
+            is_host: None,
+            version: None,
+        }
+    }
+}
+
 /// The ice candidate sent from the user to the host.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct IceCandidateJSON {
@@ -106,6 +124,6 @@ pub enum SignalMessage {
     /// Generic error containing detailed information about the cause
     Error(SessionId, UserId, String),
 
-    /// Ping message
-    Ping(bool, UserId, Option<SessionId>),
+    /// KeepAlive response
+    KeepAlive(UserId, Status),
 }
