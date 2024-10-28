@@ -1,9 +1,11 @@
 use axum::extract::{Path, State, WebSocketUpgrade};
+use axum::http::Method;
 use axum::response::Response;
 use axum::routing::get;
 use axum::{Json, Router};
 use ezrtc::protocol::SessionId;
 use serde::{Deserialize, Serialize};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::one_to_many;
 
@@ -64,5 +66,6 @@ pub fn create(server_state: ServerState) -> Router {
         .route("/", get(root))
         .route("/one-to-many", get(one_to_many_handler))
         .route("/status/:id", get(status_handler))
+        .layer(CorsLayer::new().allow_methods([Method::GET]).allow_origin(Any))
         .with_state(server_state)
 }

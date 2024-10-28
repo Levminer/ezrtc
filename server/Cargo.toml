@@ -11,7 +11,7 @@ categories = ["network-programming", "web-programming"]
 readme = "README.md"
 
 [dependencies]
-ezrtc = { path = "../client/rs" }
+ezrtc = { path = "../client/rs", version = "0"}
 futures-util = "0.3.21"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.72"
@@ -21,3 +21,5 @@ simplelog = "0.12.0"
 log = "0.4.8"
 anyhow = "1"
 axum = { version = "0.7.5", features = ["ws", "macros", "json"] }
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5.0", features = ["fs", "trace", "cors"] }
