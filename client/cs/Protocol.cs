@@ -10,8 +10,47 @@ namespace ezrtc
 		public string usernameFragment { get; set; }
 	}
 
+	public class Status
+	{
+		public string? session_id { get; set; }
+		public bool? is_host { get; set; }
+		public string? version { get; set; }
+	}
+
 	public class SignalMessage
 	{
+		public class KeepAlive
+		{
+			public class KeepAliveInput
+			{
+				public object[] KeepAlive { get; set; }
+			}
+
+			public class KeepAliveOutput
+			{
+				public string userId;
+				public Status status;
+			}
+
+			public static KeepAliveOutput Decode(string data)
+			{
+				var message = JsonSerializer.Deserialize<KeepAliveInput>(data);
+				object[] keepAlive = message.KeepAlive;
+
+				return new KeepAliveOutput
+				{
+					userId = keepAlive[0].ToString(),
+					status = JsonSerializer.Deserialize<Status>(keepAlive[1].ToString())
+				};
+			}
+
+			public static string Encode(string userId, Status status)
+			{
+				var message = new { KeepAlive = new object[] { Convert.ToUInt32(userId), status } };
+				return JsonSerializer.Serialize(message);
+			}
+		}
+
 		public class SessionJoin
 		{
 			public static string Encode(string sessionId, bool isHost)

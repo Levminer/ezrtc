@@ -5,6 +5,8 @@ VisualStudioVersion = 17.9.34607.119
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ezrtc", "client\cs\ezrtc.csproj", "{21697914-710B-4636-BD44-61064C2B9074}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "examples", "client\cs\examples\examples.csproj", "{091A116B-56DC-48D8-B32A-36AA56E71F54}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,10 +17,10 @@ Global
 		{21697914-710B-4636-BD44-61064C2B9074}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{21697914-710B-4636-BD44-61064C2B9074}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{21697914-710B-4636-BD44-61064C2B9074}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3383A1E7-8609-4A1E-BBBC-4C51F96FA377}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3383A1E7-8609-4A1E-BBBC-4C51F96FA377}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3383A1E7-8609-4A1E-BBBC-4C51F96FA377}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3383A1E7-8609-4A1E-BBBC-4C51F96FA377}.Release|Any CPU.Build.0 = Release|Any CPU
+		{091A116B-56DC-48D8-B32A-36AA56E71F54}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{091A116B-56DC-48D8-B32A-36AA56E71F54}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{091A116B-56DC-48D8-B32A-36AA56E71F54}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{091A116B-56DC-48D8-B32A-36AA56E71F54}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

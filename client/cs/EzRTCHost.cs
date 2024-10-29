@@ -57,12 +57,27 @@ namespace ezrtc
 						{
 							await HandleIceCandidate(msg, websocketClient);
 						}
+
+						if (msg.Text.Contains("KeepAlive"))
+						{
+							await HandleKeepAlive(msg, websocketClient);
+						}
 					}
 				});
 
 				websocketClient.Start();
 				exitEvent.WaitOne();
 			};
+		}
+
+		private async Task HandleKeepAlive(ResponseMessage msg, WebsocketClient websocketClient)
+		{
+			Console.WriteLine(msg.Text);
+			var keepAlive = SignalMessage.KeepAlive.Decode(msg.Text);
+
+			var message = SignalMessage.KeepAlive.Encode(keepAlive.userId, new Status { is_host = true, session_id = sessionId, version = "0.5.0" });
+
+			websocketClient.Send(message);
 		}
 
 		private async Task HandleSessionReady(ResponseMessage msg, WebsocketClient websocketClient)
