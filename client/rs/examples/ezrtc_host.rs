@@ -1,11 +1,7 @@
-use ezrtc::{host::EzRTCHost, socket::DataChannelHandler};
+use ezrtc::{host::EzRTCHost, protocol::{SignalMessage, Status, UserId}, socket::{DataChannelHandler, WSHost}, RTCDataChannel, RTCDataChannelState, RTCIceServer};
 use log::{info, LevelFilter};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 use std::sync::Arc;
-use webrtc::{
-    data_channel::{data_channel_state::RTCDataChannelState, RTCDataChannel},
-    ice_transport::ice_server::RTCIceServer,
-};
 
 #[tokio::main]
 pub async fn main() {
@@ -38,6 +34,21 @@ pub async fn main() {
 
         fn handle_data_channel_message(&self, message: String) {
             info!("Data channel message received: {:?}", message);
+        }
+
+        fn handle_keep_alive(&self, handle: &mut WSHost, user_id: UserId) {
+            let ping_message = SignalMessage::KeepAlive(
+                user_id,
+                Status {
+                    session_id: Some(handle.session_id.clone()),
+                    is_host: Some(true),
+                    version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                    metadata: Some(serde_json::json!({"test": "test",})),
+                },
+            );
+            handle.handle.text(serde_json::to_string(&ping_message).unwrap()).unwrap();
+
+            info!("Sending pong to server");
         }
     }
 

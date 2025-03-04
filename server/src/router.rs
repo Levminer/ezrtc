@@ -25,6 +25,7 @@ struct RootMessage {
 #[derive(Serialize, Deserialize)]
 struct StatusMessage {
     online: bool,
+    metadata: Option<serde_json::Value>,
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -55,8 +56,8 @@ async fn status_handler(Path(session_id): Path<String>, State(state): State<Serv
         .find_map(|(_k, v)| if v.session_id == Some(SessionId::new(session_id.clone())) { Some(v.clone()) } else { None });
 
     match ping {
-        Some(ping) => Json(StatusMessage { online: ping.online }),
-        None => Json(StatusMessage { online: false }),
+        Some(ping) => Json(StatusMessage { online: ping.online, metadata: ping.metadata.clone() }),
+        None => Json(StatusMessage { online: false, metadata: None }),
     }
 }
 

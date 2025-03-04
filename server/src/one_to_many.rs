@@ -22,6 +22,7 @@ pub struct Session {
 pub struct Ping {
     pub online: bool,
     pub session_id: Option<SessionId>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 pub type Connections = Arc<RwLock<HashMap<UserId, mpsc::UnboundedSender<Message>>>>;
@@ -63,6 +64,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
                         Arc::new(Ping {
                             online: false,
                             session_id: ping.session_id.clone(),
+                            metadata: ping.metadata.clone(),
                         }),
                     );
                 } else {
@@ -251,7 +253,7 @@ async fn user_message(sender_id: UserId, msg: Message, connections: &Connections
                     SignalMessage::KeepAlive(user_id, status) => {
                         if status.is_host.is_some() {
                             warn!("Received ping from user {:?}", status.session_id);
-                            pings.lock().unwrap().insert(user_id, Arc::new(Ping { online: true, session_id: status.session_id }));
+                            pings.lock().unwrap().insert(user_id, Arc::new(Ping { online: true, session_id: status.session_id, metadata: status.metadata }));
                         }
                     }
                     _ => {}

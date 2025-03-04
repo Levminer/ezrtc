@@ -12,7 +12,7 @@
 
 [![NPM Version](<https://img.shields.io/npm/v/ezrtc?label=Client%20(npm)>)](https://www.npmjs.com/package/ezrtc)
 [![Crates.io Version](<https://img.shields.io/crates/v/ezrtc?label=Client%20(crates)>)](https://crates.io/crates/ezrtc)
-![NuGet Version](<https://img.shields.io/nuget/v/ezrtc?label=Client%20(NuGet)>)
+[![NuGet Version](<https://img.shields.io/nuget/v/ezrtc?label=Client%20(NuGet)>)](https://www.nuget.org/packages/ezrtc)
 
 ## Server
 

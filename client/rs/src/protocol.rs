@@ -77,6 +77,7 @@ pub struct Status {
     pub session_id: Option<SessionId>,
     pub is_host: Option<IsHost>,
     pub version: Option<String>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 impl Default for Status {
@@ -85,6 +86,7 @@ impl Default for Status {
             session_id: None,
             is_host: None,
             version: None,
+            metadata: None,
         }
     }
 }

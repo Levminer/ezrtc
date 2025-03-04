@@ -1,4 +1,3 @@
-use crate::protocol::Status;
 use crate::protocol::{IceCandidateJSON, SessionId, SignalMessage, UserId};
 use async_trait::async_trait;
 use ezsockets::client::ClientCloseMode;
@@ -46,6 +45,7 @@ pub struct WSClient {
 pub trait DataChannelHandler: Send + Sync {
     fn handle_data_channel_open(&self, dc: Arc<RTCDataChannel>);
     fn handle_data_channel_message(&self, message: String);
+    fn handle_keep_alive(&self, handle: &mut WSHost, user_id: UserId);
 }
 
 #[async_trait]
@@ -179,17 +179,9 @@ impl ezsockets::ClientExt for WSHost {
                     peer_connection.add_ice_candidate(candidate_init).await.unwrap();
                 }
                 SignalMessage::KeepAlive(user_id, _status) => {
-                    let ping_message = SignalMessage::KeepAlive(
-                        user_id,
-                        Status {
-                            session_id: Some(self.session_id.clone()),
-                            is_host: Some(true),
-                            version: Some(env!("CARGO_PKG_VERSION").to_string()),
-                        },
-                    );
-                    self.handle.text(serde_json::to_string(&ping_message).unwrap()).unwrap();
+                    let dc_handler = self.data_channel_handler.clone();
 
-                    info!("Sending pong to server");
+                    dc_handler.handle_keep_alive(self, user_id);
                 }
                 _ => {}
             },

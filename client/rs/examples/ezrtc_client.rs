@@ -1,11 +1,7 @@
-use ezrtc::{client::EzRTCClient, socket::DataChannelHandler};
+use ezrtc::{client::EzRTCClient, socket::DataChannelHandler, RTCDataChannel, RTCDataChannelState, RTCIceServer};
 use log::{info, LevelFilter};
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
 use std::sync::Arc;
-use webrtc::{
-    data_channel::{data_channel_state::RTCDataChannelState, RTCDataChannel},
-    ice_transport::ice_server::RTCIceServer,
-};
 
 #[tokio::main]
 pub async fn main() {
@@ -38,6 +34,10 @@ pub async fn main() {
 
         fn handle_data_channel_message(&self, message: String) {
             info!("Data channel message received: {:?}", message);
+        }
+
+        fn handle_keep_alive(&self, _handle: &mut ezrtc::socket::WSHost, _user_id: ezrtc::protocol::UserId) {
+            info!("Received keep alive from server");
         }
     }
 
