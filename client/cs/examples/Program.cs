@@ -10,7 +10,7 @@ namespace examples
 		private static void Main(string[] args)
 		{
 			Task.Run(EzRTCHost.Start);
-			while (true) { }
+			Console.ReadLine();
 		}
 	}
 }

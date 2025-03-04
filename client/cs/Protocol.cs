@@ -15,6 +15,7 @@ namespace ezrtc
 		public string? session_id { get; set; }
 		public bool? is_host { get; set; }
 		public string? version { get; set; }
+		public Dictionary<string, object> metadata { get; set; }
 	}
 
 	public class SignalMessage

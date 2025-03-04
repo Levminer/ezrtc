@@ -16,6 +16,7 @@ namespace ezrtc
 		public ManualResetEvent exitEvent = new(false);
 		public Action<RTCDataChannel>? dataChannelOpen { get; set; }
 		public Action<string>? dataChannelMessage { get; set; }
+		public Action<WebsocketClient, string>? keepAliveMessage { get; set; }
 
 		public EzRTCHost(Uri hostURL, string sessionId, List<RTCIceServer>? iceServers = null)
 		{
@@ -72,12 +73,18 @@ namespace ezrtc
 
 		private async Task HandleKeepAlive(ResponseMessage msg, WebsocketClient websocketClient)
 		{
-			Console.WriteLine(msg.Text);
-			var keepAlive = SignalMessage.KeepAlive.Decode(msg.Text);
+			if (keepAliveMessage != null)
+			{
+				keepAliveMessage.Invoke(websocketClient, msg.Text);
+			}
+			else
+			{
+				var keepAlive = SignalMessage.KeepAlive.Decode(msg.Text);
 
-			var message = SignalMessage.KeepAlive.Encode(keepAlive.userId, new Status { is_host = true, session_id = sessionId, version = "0.5.0" });
+				var message = SignalMessage.KeepAlive.Encode(keepAlive.userId, new Status { is_host = true, session_id = sessionId, version = "0.5.0" });
 
-			websocketClient.Send(message);
+				websocketClient.Send(message);
+			}
 		}
 
 		private async Task HandleSessionReady(ResponseMessage msg, WebsocketClient websocketClient)
