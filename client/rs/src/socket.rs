@@ -3,6 +3,8 @@ use async_trait::async_trait;
 use ezsockets::client::ClientCloseMode;
 use ezsockets::CloseFrame;
 use ezsockets::Error;
+use ezsockets::Utf8Bytes;
+use ezsockets::Bytes;
 use ezsockets::WSError;
 use log::{error, info, warn};
 use std::collections::HashMap;
@@ -52,7 +54,7 @@ pub trait DataChannelHandler: Send + Sync {
 impl ezsockets::ClientExt for WSHost {
     type Call = WSCall;
 
-    async fn on_text(&mut self, text: String) -> Result<(), Error> {
+    async fn on_text(&mut self, text: Utf8Bytes) -> Result<(), Error> {
         info!("Message received from signaling server: {:?}", text);
 
         match serde_json::from_str::<SignalMessage>(&text) {
@@ -193,7 +195,7 @@ impl ezsockets::ClientExt for WSHost {
         Ok(())
     }
 
-    async fn on_binary(&mut self, bytes: Vec<u8>) -> Result<(), Error> {
+    async fn on_binary(&mut self, bytes: Bytes) -> Result<(), Error> {
         info!("received bytes: {bytes:?}");
         Ok(())
     }
@@ -230,7 +232,7 @@ impl ezsockets::ClientExt for WSHost {
 impl ezsockets::ClientExt for WSClient {
     type Call = WSCall;
 
-    async fn on_text(&mut self, text: String) -> Result<(), Error> {
+    async fn on_text(&mut self, text: Utf8Bytes) -> Result<(), Error> {
         info!("Message received from signaling server: {:?}", text);
 
         match serde_json::from_str::<SignalMessage>(&text) {
@@ -289,7 +291,7 @@ impl ezsockets::ClientExt for WSClient {
         Ok(())
     }
 
-    async fn on_binary(&mut self, bytes: Vec<u8>) -> Result<(), Error> {
+    async fn on_binary(&mut self, bytes: Bytes) -> Result<(), Error> {
         info!("received bytes: {bytes:?}");
         Ok(())
     }
