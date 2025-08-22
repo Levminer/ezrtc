@@ -212,8 +212,8 @@ impl ezsockets::ClientExt for WSHost {
         Ok(())
     }
 
-    async fn on_connect_fail(&mut self, _error: WSError) -> Result<ClientCloseMode, Error> {
-        error!("Connection failed");
+    async fn on_connect_fail(&mut self, error: WSError) -> Result<ClientCloseMode, Error> {
+        error!("Connection failed: {:?}", error);
         Ok(ClientCloseMode::Reconnect)
     }
 
@@ -308,8 +308,8 @@ impl ezsockets::ClientExt for WSClient {
         Ok(())
     }
 
-    async fn on_connect_fail(&mut self, _error: WSError) -> Result<ClientCloseMode, Error> {
-        error!("Connection failed");
+    async fn on_connect_fail(&mut self, error: WSError) -> Result<ClientCloseMode, Error> {
+        error!("Connection failed: {:?}", error);
         Ok(ClientCloseMode::Reconnect)
     }
 

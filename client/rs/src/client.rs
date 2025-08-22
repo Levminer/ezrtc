@@ -79,6 +79,9 @@ impl EzRTCClient {
         let pc = Arc::clone(&global_peer_connection);
         let ice = ice_servers.clone();
 
+        // Crypto provider
+        rustls::crypto::aws_lc_rs::default_provider().install_default().expect("failed to install default crypto provider");
+
         let config = ClientConfig::new(signaling_url);
         let config = config.socket_config(SocketConfig {
             heartbeat: Duration::from_secs(60),
