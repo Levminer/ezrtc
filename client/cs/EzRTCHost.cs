@@ -114,7 +114,12 @@ namespace ezrtc
 		private async Task HandleSdpAnswer(ResponseMessage msg, WebsocketClient websocketClient)
 		{
 			var sdpAnswer = SignalMessage.SdpAnswer.Decode(msg.Text);
-			var peerConnection = peerConnections[sdpAnswer.userId];
+			
+			if (!peerConnections.TryGetValue(sdpAnswer.userId, out var peerConnection))
+			{
+				Log.Warning($"Peer connection not found for user ID: {sdpAnswer.userId}");
+				return;
+			}
 
 			var answer = new RTCSessionDescriptionInit
 			{
@@ -126,7 +131,11 @@ namespace ezrtc
 			{
 				var res = peerConnection.setRemoteDescription(answer);
 
-				var dc = dataChannels[sdpAnswer.userId];
+				if (!dataChannels.TryGetValue(sdpAnswer.userId, out var dc))
+				{
+					Log.Warning($"Data channel not found for user ID: {sdpAnswer.userId}");
+					return;
+				}
 
 				dc.onopen += () =>
 				{
@@ -152,11 +161,14 @@ namespace ezrtc
 
 					if (state == RTCPeerConnectionState.failed)
 					{
-						dataChannels[sdpAnswer.userId].close();
+						if (dataChannels.TryGetValue(sdpAnswer.userId, out var dataChannel))
+						{
+							dataChannel.close();
+							dataChannels.TryRemove(sdpAnswer.userId, out _);
+						}
+						
 						peerConnection.close();
-
 						peerConnections.TryRemove(sdpAnswer.userId, out _);
-						dataChannels.TryRemove(sdpAnswer.userId, out _);
 					}
 				};
 			}
@@ -165,7 +177,12 @@ namespace ezrtc
 		private async Task HandleIceCandidate(ResponseMessage msg, WebsocketClient websocketClient)
 		{
 			var incomingIceCandidate = SignalMessage.IceCandidate.Decode(msg.Text);
-			var peerConnection = peerConnections[incomingIceCandidate.userId];
+			
+			if (!peerConnections.TryGetValue(incomingIceCandidate.userId, out var peerConnection))
+			{
+				Log.Warning($"Peer connection not found for user ID: {incomingIceCandidate.userId}");
+				return;
+			}
 
 			var iceInit = new RTCIceCandidateInit
 			{
@@ -183,7 +200,11 @@ namespace ezrtc
 		// Send message to a specific user
 		public void SendMessage(string message, string userId)
 		{
-			var dataChannel = dataChannels[userId];
+			if (!dataChannels.TryGetValue(userId, out var dataChannel))
+			{
+				Log.Warning($"Data channel not found for user ID: {userId}");
+				return;
+			}
 
 			if (dataChannel != null && dataChannel.readyState == RTCDataChannelState.open)
 			{
