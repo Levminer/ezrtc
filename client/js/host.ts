@@ -12,6 +12,8 @@ export class EzRTCHost {
 	peerConnections = new Map<number, RTCPeerConnection>()
 	dataChannels = new Map<number, RTCDataChannel>()
 	#iceServers: RTCIceServer[] = []
+	#pendingIceCandidates = new Map<number, RTCIceCandidateInit[]>()
+	#remoteDescriptionSet = new Map<number, boolean>()
 
 	constructor(host: string, sessionId: string, iceServers?: RTCIceServer[]) {
 		this.hostURL = host
@@ -48,13 +50,27 @@ export class EzRTCHost {
 						iceServers: this.#iceServers,
 					})
 					this.peerConnections.set(sessionReady.userId, peerConnection)
+					this.#pendingIceCandidates.set(sessionReady.userId, [])
+					this.#remoteDescriptionSet.set(sessionReady.userId, false)
 
 					const dataChannel = peerConnection.createDataChannel(`send-${sessionReady.userId}`)
 					this.dataChannels.set(sessionReady.userId, dataChannel)
 
 					peerConnection.onicecandidate = (e) => {
-						// Only send one ICE candidate
-						console.log(e)
+						// Send ICE candidates to the client
+						if (e.candidate) {
+							console.log("Host sending ICE candidate:", e.candidate)
+							const iceInfo = {
+								candidate: e.candidate.candidate,
+								sdpMid: e.candidate.sdpMid,
+								sdpMLineIndex: e.candidate.sdpMLineIndex,
+								usernameFragment: e.candidate.usernameFragment,
+							}
+
+							websocket.send(new SignalMessage().IceCandidate().Encode(sessionId, sessionReady.userId, iceInfo))
+						} else {
+							console.log("Host ICE gathering complete (null candidate)")
+						}
 					}
 
 					peerConnection.createOffer().then(async (a) => {
@@ -76,6 +92,17 @@ export class EzRTCHost {
 					if (peerConnection && peerConnection.signalingState === "have-local-offer") {
 						peerConnection.setRemoteDescription(answer).then(() => {
 							console.log("Answer set")
+							this.#remoteDescriptionSet.set(sdpAnswer.userId, true)
+
+							// Add any pending ICE candidates now that remote description is set
+							const pendingCandidates = this.#pendingIceCandidates.get(sdpAnswer.userId) || []
+							pendingCandidates.forEach((candidate) => {
+								peerConnection
+									.addIceCandidate(candidate)
+									.then(() => console.log("Queued ICE candidate added"))
+									.catch((err) => console.error("Error adding queued ICE candidate:", err))
+							})
+							this.#pendingIceCandidates.set(sdpAnswer.userId, [])
 
 							// get data channel
 							const dataChannel = this.dataChannels.get(sdpAnswer.userId)
@@ -99,19 +126,30 @@ export class EzRTCHost {
 
 				if (data.IceCandidate) {
 					const iceCandidate = new SignalMessage().IceCandidate().Decode(data)
+					console.log("Host received ICE candidate:", iceCandidate)
 					const peerConnection = this.peerConnections.get(iceCandidate.userId)
 
 					if (peerConnection) {
-						const candidate = new RTCIceCandidate({
+						const candidate: RTCIceCandidateInit = {
 							candidate: iceCandidate.candidate.candidate,
 							sdpMid: iceCandidate.candidate.sdpMid,
 							sdpMLineIndex: iceCandidate.candidate.sdpMLineIndex,
 							usernameFragment: iceCandidate.candidate.usernameFragment,
-						})
+						}
 
-						peerConnection.addIceCandidate(candidate).then(() => {
-							console.log("Ice candidate added")
-						})
+						// Queue candidates if remote description hasn't been set yet
+						const remoteDescSet = this.#remoteDescriptionSet.get(iceCandidate.userId) || false
+						if (!remoteDescSet) {
+							console.log("Queueing ICE candidate (remote description not set yet)")
+							const queue = this.#pendingIceCandidates.get(iceCandidate.userId) || []
+							queue.push(candidate)
+							this.#pendingIceCandidates.set(iceCandidate.userId, queue)
+						} else {
+							peerConnection
+								.addIceCandidate(candidate)
+								.then(() => console.log("Ice candidate added successfully"))
+								.catch((err) => console.error("Error adding ICE candidate:", err))
+						}
 					}
 				}
 			}
