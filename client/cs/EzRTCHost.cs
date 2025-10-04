@@ -113,9 +113,17 @@ namespace ezrtc
 				{
 					Log.Information($"Host sending ICE candidate: {iceCandidate.candidate}");
 					
-					var iceCandidateInfo = new IceCandidateInfo
+					// SIPSorcery's candidate string doesn't include the "candidate:" prefix
+					// Add it to match WebRTC standard format
+					var candidateString = iceCandidate.candidate;
+					if (!candidateString.StartsWith("candidate:"))
 					{
-						candidate = iceCandidate.candidate,
+						candidateString = "candidate:" + candidateString;
+					}
+					
+					var iceCandidateInfo = new ICandidate
+					{
+						candidate = candidateString,
 						sdpMid = iceCandidate.sdpMid,
 						sdpMLineIndex = iceCandidate.sdpMLineIndex,
 						usernameFragment = iceCandidate.usernameFragment
@@ -234,9 +242,16 @@ namespace ezrtc
 				return;
 			}
 
+			// Remove "candidate:" prefix if present, as SIPSorcery expects the candidate without it
+			var candidateString = incomingIceCandidate.candidate.candidate;
+			if (candidateString.StartsWith("candidate:"))
+			{
+				candidateString = candidateString.Substring("candidate:".Length);
+			}
+
 			var iceInit = new RTCIceCandidateInit
 			{
-				candidate = incomingIceCandidate.candidate.candidate,
+				candidate = candidateString,
 				sdpMid = incomingIceCandidate.candidate.sdpMid,
 				sdpMLineIndex = (ushort)incomingIceCandidate.candidate.sdpMLineIndex,
 				usernameFragment = incomingIceCandidate.candidate.usernameFragment,
