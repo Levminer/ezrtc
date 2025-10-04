@@ -89,17 +89,25 @@ impl ezsockets::ClientExt for WSHost {
                             if let Some(c) = candidate {
                                 info!("Host sending ICE candidate: {:?}", c);
 
-                                let ice_json = IceCandidateJSON {
-                                    candidate: c.to_json().unwrap().candidate,
-                                    sdp_mid: c.to_json().unwrap().sdp_mid,
-                                    sdp_mline_index: c.to_json().unwrap().sdp_mline_index,
-                                    username_fragment: c.to_json().unwrap().username_fragment,
-                                };
-                                let ice_candidate_str = serde_json::to_string(&ice_json).unwrap();
+                                match c.to_json() {
+                                    Ok(ice_candidate_init) => {
+                                        let ice_json = IceCandidateJSON {
+                                            candidate: ice_candidate_init.candidate,
+                                            sdp_mid: ice_candidate_init.sdp_mid,
+                                            sdp_mline_index: ice_candidate_init.sdp_mline_index,
+                                            username_fragment: ice_candidate_init.username_fragment,
+                                        };
 
-                                hndl2
-                                    .text(serde_json::to_string(&SignalMessage::IceCandidate(session_id2, user_id, ice_candidate_str)).unwrap())
-                                    .unwrap();
+                                        let ice_candidate_str = serde_json::to_string(&ice_json).unwrap();
+
+                                        hndl2
+                                            .text(serde_json::to_string(&SignalMessage::IceCandidate(session_id2, user_id, ice_candidate_str)).unwrap())
+                                            .unwrap();
+                                    }
+                                    Err(e) => {
+                                        warn!("Failed to convert ICE candidate to JSON: {:?}", e);
+                                    }
+                                }
                             } else {
                                 info!("Host ICE gathering complete (null candidate)");
                             }
@@ -287,18 +295,25 @@ impl ezsockets::ClientExt for WSClient {
                             if let Some(c) = candidate {
                                 info!("Client sending ICE candidate: {:?}", c);
 
-                                let ice_json = IceCandidateJSON {
-                                    candidate: c.to_json().unwrap().candidate,
-                                    sdp_mid: c.to_json().unwrap().sdp_mid,
-                                    sdp_mline_index: c.to_json().unwrap().sdp_mline_index,
-                                    username_fragment: c.to_json().unwrap().username_fragment,
-                                };
+                                match c.to_json() {
+                                    Ok(ice_candidate_init) => {
+                                        let ice_json = IceCandidateJSON {
+                                            candidate: ice_candidate_init.candidate,
+                                            sdp_mid: ice_candidate_init.sdp_mid,
+                                            sdp_mline_index: ice_candidate_init.sdp_mline_index,
+                                            username_fragment: ice_candidate_init.username_fragment,
+                                        };
 
-                                let ice_candidate_str = serde_json::to_string(&ice_json).unwrap();
+                                        let ice_candidate_str = serde_json::to_string(&ice_json).unwrap();
 
-                                hndl2
-                                    .text(serde_json::to_string(&SignalMessage::IceCandidate(session_id2, user_id, ice_candidate_str)).unwrap())
-                                    .unwrap();
+                                        hndl2
+                                            .text(serde_json::to_string(&SignalMessage::IceCandidate(session_id2, user_id, ice_candidate_str)).unwrap())
+                                            .unwrap();
+                                    }
+                                    Err(e) => {
+                                        warn!("Failed to convert ICE candidate to JSON: {:?}", e);
+                                    }
+                                }
                             } else {
                                 info!("Client ICE gathering complete (null candidate)");
                             }
