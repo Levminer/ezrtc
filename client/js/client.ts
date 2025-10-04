@@ -12,6 +12,8 @@ export class EzRTCClient {
 	peerConnection: RTCPeerConnection
 	dataChannel?: RTCDataChannel
 	#messageCallback?: (message: string) => void
+	#pendingIceCandidates: RTCIceCandidateInit[] = []
+	#remoteDescriptionSet = false
 
 	constructor(host: string, sessionId: string, iceServers?: RTCIceServer[]) {
 		this.hostURL = host
@@ -50,13 +52,11 @@ export class EzRTCClient {
 						sdp: sdpOffer.offer,
 					}
 
+					// Set up ICE candidate handler before setting remote description
 					this.peerConnection.onicecandidate = (e) => {
 						// Only send ICE candidates if Candidate is present
 						if (e.candidate) {
-							websocket.send(
-								new SignalMessage().SdpAnswer().Encode(sessionId, sdpOffer.userId, this.peerConnection.localDescription!.sdp),
-							)
-
+							console.log("Client sending ICE candidate:", e.candidate)
 							let iceInfo: IceCandidate = {
 								candidate: e.candidate.candidate,
 								sdpMid: e.candidate.sdpMid,
@@ -65,6 +65,8 @@ export class EzRTCClient {
 							}
 
 							websocket.send(new SignalMessage().IceCandidate().Encode(sessionId, sdpOffer.userId, iceInfo))
+						} else {
+							console.log("Client ICE gathering complete (null candidate)")
 						}
 					}
 
@@ -80,17 +82,63 @@ export class EzRTCClient {
 						this.dataChannel.onclose = (e) => console.log("Data channel closed")
 					}
 
-					this.peerConnection.setRemoteDescription(offer).then(() => {
-						console.log("offer set")
-					})
-
-					this.peerConnection.createAnswer().then(async (a) => {
-						await this.peerConnection.setLocalDescription(a)
-						console.log("answer created")
-					})
-
 					this.peerConnection.onconnectionstatechange = (state) => {
 						console.log("State changed", state.currentTarget)
+					}
+
+					// Set remote description, create answer, and send it
+					this.peerConnection
+						.setRemoteDescription(offer)
+						.then(() => {
+							console.log("offer set")
+							this.#remoteDescriptionSet = true
+
+							// Add any pending ICE candidates now that remote description is set
+							this.#pendingIceCandidates.forEach((candidate) => {
+								this.peerConnection
+									.addIceCandidate(candidate)
+									.then(() => console.log("Queued ICE candidate added"))
+									.catch((err) => console.error("Error adding queued ICE candidate:", err))
+							})
+							this.#pendingIceCandidates = []
+
+							return this.peerConnection.createAnswer()
+						})
+						.then((answer) => {
+							return this.peerConnection.setLocalDescription(answer)
+						})
+						.then(() => {
+							// Send answer after it's been set locally
+							websocket.send(
+								new SignalMessage().SdpAnswer().Encode(sessionId, sdpOffer.userId, this.peerConnection.localDescription!.sdp),
+							)
+							console.log("answer created and sent")
+						})
+						.catch((error) => {
+							console.error("Error during offer/answer exchange:", error)
+						})
+				}
+
+				if (data.IceCandidate) {
+					const iceCandidate = new SignalMessage().IceCandidate().Decode(data)
+					console.log("Client received ICE candidate:", iceCandidate)
+
+					const candidate: RTCIceCandidateInit = {
+						candidate: iceCandidate.candidate.candidate,
+						sdpMid: iceCandidate.candidate.sdpMid,
+						sdpMLineIndex: iceCandidate.candidate.sdpMLineIndex,
+						usernameFragment: iceCandidate.candidate.usernameFragment,
+					}
+
+					// Queue candidates if remote description hasn't been set yet
+					if (!this.#remoteDescriptionSet) {
+						console.log("Queueing ICE candidate (remote description not set yet)")
+						this.#pendingIceCandidates.push(candidate)
+					} else {
+						this.peerConnection
+							.addIceCandidate(candidate)
+							.then(() => console.log("Ice candidate added successfully"))
+							.catch((err) => console.error("Error adding ICE candidate:", err))
 					}
 				}
 			}

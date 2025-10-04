@@ -1,4 +1,5 @@
 ﻿using ezrtc;
+using Serilog;
 using SIPSorcery.Net;
 
 namespace examples
@@ -9,8 +10,19 @@ namespace examples
 
 		private static void Main(string[] args)
 		{
+			// Configure Serilog
+			Log.Logger = new LoggerConfiguration()
+				.MinimumLevel.Debug()
+				.WriteTo.Console()
+				.CreateLogger();
+
+			Log.Information("Starting EzRTC example");
+
 			Task.Run(EzRTCHost.Start);
 			Console.ReadLine();
+
+			Log.Information("Shutting down EzRTC example");
+			Log.CloseAndFlush();
 		}
 	}
 }

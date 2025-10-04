@@ -13,6 +13,8 @@ namespace ezrtc
 		public List<RTCIceServer> iceServers;
 		private ConcurrentDictionary<string, RTCPeerConnection> peerConnections = new();
 		private ConcurrentDictionary<string, RTCDataChannel> dataChannels = new();
+		private ConcurrentDictionary<string, List<RTCIceCandidateInit>> pendingIceCandidates = new();
+		private ConcurrentDictionary<string, bool> remoteDescriptionSet = new();
 		public ManualResetEvent exitEvent = new(false);
 		public Action<RTCDataChannel>? dataChannelOpen { get; set; }
 		public Action<string>? dataChannelMessage { get; set; }
@@ -98,8 +100,43 @@ namespace ezrtc
 
 			var peerConnection = new RTCPeerConnection(config);
 			peerConnections.TryAdd(sessionReady.userId, peerConnection);
+			pendingIceCandidates.TryAdd(sessionReady.userId, new List<RTCIceCandidateInit>());
+			remoteDescriptionSet.TryAdd(sessionReady.userId, false);
+			
 			var dataChannel = await peerConnection.createDataChannel("testing");
 			dataChannels.TryAdd(sessionReady.userId, dataChannel);
+
+			// Set up ICE candidate handler to send candidates to the client
+			peerConnection.onicecandidate += (iceCandidate) =>
+			{
+				if (iceCandidate != null)
+				{
+					Log.Information($"Host sending ICE candidate: {iceCandidate.candidate}");
+					
+					// SIPSorcery's candidate string doesn't include the "candidate:" prefix
+					// Add it to match WebRTC standard format
+					var candidateString = iceCandidate.candidate;
+					if (!candidateString.StartsWith("candidate:"))
+					{
+						candidateString = "candidate:" + candidateString;
+					}
+					
+					var iceCandidateInfo = new ICandidate
+					{
+						candidate = candidateString,
+						sdpMid = iceCandidate.sdpMid,
+						sdpMLineIndex = iceCandidate.sdpMLineIndex,
+						usernameFragment = iceCandidate.usernameFragment
+					};
+
+					var iceCandidateMessage = SignalMessage.IceCandidate.Encode(sessionId, sessionReady.userId, iceCandidateInfo);
+					websocketClient.Send(iceCandidateMessage);
+				}
+				else
+				{
+					Log.Information("Host ICE gathering complete (null candidate)");
+				}
+			};
 
 			var offer = peerConnection.createOffer();
 			Log.Information("Created offer");
@@ -130,6 +167,27 @@ namespace ezrtc
 			if (peerConnection != null && peerConnection.signalingState == RTCSignalingState.have_local_offer)
 			{
 				var res = peerConnection.setRemoteDescription(answer);
+				Log.Information("Answer set");
+				
+				// Mark remote description as set and add any pending ICE candidates
+				remoteDescriptionSet.TryUpdate(sdpAnswer.userId, true, false);
+				
+				if (pendingIceCandidates.TryGetValue(sdpAnswer.userId, out var pendingCandidates))
+				{
+					foreach (var candidate in pendingCandidates)
+					{
+						try
+						{
+							peerConnection.addIceCandidate(candidate);
+							Log.Information("Queued ICE candidate added");
+						}
+						catch (Exception ex)
+						{
+							Log.Error($"Error adding queued ICE candidate: {ex.Message}");
+						}
+					}
+					pendingCandidates.Clear();
+				}
 
 				if (!dataChannels.TryGetValue(sdpAnswer.userId, out var dc))
 				{
@@ -184,17 +242,42 @@ namespace ezrtc
 				return;
 			}
 
+			// Remove "candidate:" prefix if present, as SIPSorcery expects the candidate without it
+			var candidateString = incomingIceCandidate.candidate.candidate;
+			if (candidateString.StartsWith("candidate:"))
+			{
+				candidateString = candidateString.Substring("candidate:".Length);
+			}
+
 			var iceInit = new RTCIceCandidateInit
 			{
-				candidate = incomingIceCandidate.candidate.candidate,
+				candidate = candidateString,
 				sdpMid = incomingIceCandidate.candidate.sdpMid,
 				sdpMLineIndex = (ushort)incomingIceCandidate.candidate.sdpMLineIndex,
 				usernameFragment = incomingIceCandidate.candidate.usernameFragment,
 			};
 
-			peerConnection.addIceCandidate(iceInit);
-
-			Log.Information("Ice candidate added");
+			// Queue candidates if remote description hasn't been set yet
+			if (remoteDescriptionSet.TryGetValue(incomingIceCandidate.userId, out var isRemoteDescSet) && !isRemoteDescSet)
+			{
+				Log.Information("Queueing ICE candidate (remote description not set yet)");
+				if (pendingIceCandidates.TryGetValue(incomingIceCandidate.userId, out var queue))
+				{
+					queue.Add(iceInit);
+				}
+			}
+			else
+			{
+				try
+				{
+					peerConnection.addIceCandidate(iceInit);
+					Log.Information("Ice candidate added successfully");
+				}
+				catch (Exception ex)
+				{
+					Log.Error($"Error adding ICE candidate: {ex.Message}");
+				}
+			}
 		}
 
 		// Send message to a specific user

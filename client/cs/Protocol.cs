@@ -181,6 +181,14 @@ namespace ezrtc
 					candidate = JsonSerializer.Deserialize<ICandidate>(sdpOffer[2].ToString()),
 				};
 			}
+
+			public static string Encode(string sessionId, string userId, ICandidate candidate)
+			{
+				// Serialize the candidate to a JSON string first, then include it in the message
+				var candidateJson = JsonSerializer.Serialize(candidate);
+				var message = new { IceCandidate = new object[] { sessionId, Convert.ToUInt32(userId), candidateJson } };
+				return JsonSerializer.Serialize(message);
+			}
 		}
 	}
 }
