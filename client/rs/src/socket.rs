@@ -1,10 +1,10 @@
 use crate::protocol::{IceCandidateJSON, SessionId, SignalMessage, UserId};
 use async_trait::async_trait;
 use ezsockets::client::ClientCloseMode;
+use ezsockets::Bytes;
 use ezsockets::CloseFrame;
 use ezsockets::Error;
 use ezsockets::Utf8Bytes;
-use ezsockets::Bytes;
 use ezsockets::WSError;
 use log::{error, info, warn};
 use std::collections::HashMap;
@@ -76,6 +76,35 @@ impl ezsockets::ClientExt for WSHost {
 
                     let peer_connection = Arc::new(api.new_peer_connection(config).await.unwrap());
                     let data_channel = peer_connection.create_data_channel("ezrtc-dc", None).await.unwrap();
+
+                    // Set up ICE candidate handler to send candidates to the client
+                    let hndl = self.handle.clone();
+                    let session_id_clone = session_id.clone();
+
+                    peer_connection.on_ice_candidate(Box::new(move |candidate: Option<RTCIceCandidate>| {
+                        let hndl2 = hndl.clone();
+                        let session_id2 = session_id_clone.clone();
+
+                        Box::pin(async move {
+                            if let Some(c) = candidate {
+                                info!("Host sending ICE candidate: {:?}", c);
+
+                                let ice_json = IceCandidateJSON {
+                                    candidate: c.to_json().unwrap().candidate,
+                                    sdp_mid: c.to_json().unwrap().sdp_mid,
+                                    sdp_mline_index: c.to_json().unwrap().sdp_mline_index,
+                                    username_fragment: c.to_json().unwrap().username_fragment,
+                                };
+                                let ice_candidate_str = serde_json::to_string(&ice_json).unwrap();
+
+                                hndl2
+                                    .text(serde_json::to_string(&SignalMessage::IceCandidate(session_id2, user_id, ice_candidate_str)).unwrap())
+                                    .unwrap();
+                            } else {
+                                info!("Host ICE gathering complete (null candidate)");
+                            }
+                        })
+                    }));
 
                     let offer = peer_connection.create_offer(None).await.unwrap();
 
@@ -164,6 +193,8 @@ impl ezsockets::ClientExt for WSHost {
                 }
                 // SignalMessage::SdpOffer(session_id, user_id, sdp_offer) => {}
                 SignalMessage::IceCandidate(_session_id, user_id, ice_candidate) => {
+                    info!("Host received ICE candidate");
+
                     let peer_connection = {
                         let peer_connections = self.peer_connections.lock().unwrap();
                         peer_connections.get(&user_id).unwrap().clone()
@@ -179,6 +210,8 @@ impl ezsockets::ClientExt for WSHost {
                     };
 
                     peer_connection.add_ice_candidate(candidate_init).await.unwrap();
+
+                    info!("Host ICE candidate added successfully");
                 }
                 SignalMessage::KeepAlive(user_id, _status) => {
                     let dc_handler = self.data_channel_handler.clone();
@@ -242,38 +275,66 @@ impl ezsockets::ClientExt for WSClient {
 
                     let offer = RTCSessionDescription::offer(sdp_offer).unwrap();
 
+                    // Set up ICE candidate handler before setting remote description
+                    let hndl = self.handle.clone();
+                    let session_id_clone = session_id.clone();
+
+                    peer_connection.on_ice_candidate(Box::new(move |candidate: Option<RTCIceCandidate>| {
+                        let hndl2 = hndl.clone();
+                        let session_id2 = session_id_clone.clone();
+
+                        Box::pin(async move {
+                            if let Some(c) = candidate {
+                                info!("Client sending ICE candidate: {:?}", c);
+
+                                let ice_json = IceCandidateJSON {
+                                    candidate: c.to_json().unwrap().candidate,
+                                    sdp_mid: c.to_json().unwrap().sdp_mid,
+                                    sdp_mline_index: c.to_json().unwrap().sdp_mline_index,
+                                    username_fragment: c.to_json().unwrap().username_fragment,
+                                };
+
+                                let ice_candidate_str = serde_json::to_string(&ice_json).unwrap();
+
+                                hndl2
+                                    .text(serde_json::to_string(&SignalMessage::IceCandidate(session_id2, user_id, ice_candidate_str)).unwrap())
+                                    .unwrap();
+                            } else {
+                                info!("Client ICE gathering complete (null candidate)");
+                            }
+                        })
+                    }));
+
                     peer_connection.set_remote_description(offer).await.unwrap();
 
                     let answer = peer_connection.create_answer(None).await.unwrap();
 
                     peer_connection.set_local_description(answer.clone()).await.unwrap();
 
-                    info!("Remote description set");
+                    info!("Remote description set and answer created");
 
-                    let pc = Arc::downgrade(&peer_connection);
-                    let hndl = self.handle.clone();
+                    // Send the answer
+                    self.handle.text(serde_json::to_string(&SignalMessage::SdpAnswer(session_id, user_id, answer.sdp)).unwrap()).unwrap();
 
-                    peer_connection.on_ice_candidate(Box::new(move |candidate: Option<RTCIceCandidate>| {
-                        info!("Ica candidate received: {:?}", candidate);
+                    info!("Answer sent");
+                }
+                SignalMessage::IceCandidate(_session_id, _user_id, ice_candidate) => {
+                    info!("Client received ICE candidate");
 
-                        let pc2 = pc.clone();
-                        let session_id2 = session_id.clone();
-                        let hndl2 = hndl.clone();
+                    let peer_connection = self.peer_connection.lock().unwrap().clone();
 
-                        Box::pin(async move {
-                            if let Some(c) = candidate {
-                                if let Some(pc) = pc2.upgrade() {
-                                    let ld = pc.local_description().await.unwrap();
+                    let candidate = serde_json::from_str::<IceCandidateJSON>(ice_candidate.as_str()).unwrap();
 
-                                    info!("sending answer {c}");
+                    let candidate_init = RTCIceCandidateInit {
+                        candidate: candidate.candidate,
+                        sdp_mid: candidate.sdp_mid,
+                        sdp_mline_index: candidate.sdp_mline_index,
+                        username_fragment: candidate.username_fragment,
+                    };
 
-                                    hndl2.text(serde_json::to_string(&SignalMessage::SdpAnswer(session_id2, user_id, ld.sdp)).unwrap()).unwrap();
+                    peer_connection.add_ice_candidate(candidate_init).await.unwrap();
 
-                                    // TODO send ice candidate
-                                }
-                            }
-                        })
-                    }));
+                    info!("Client ICE candidate added successfully");
                 }
                 // SignalMessage::Ping(_is_host, user_id) => {
                 //     let ping_message = SignalMessage::Ping(true, user_id);
