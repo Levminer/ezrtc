@@ -141,8 +141,9 @@ impl ezsockets::ClientExt for WSHost {
                     if peer_connection.signaling_state() == RTCSignalingState::HaveLocalOffer {
                         pc.set_remote_description(answer).await.unwrap();
 
-                        warn!("Remote description set");
-                    } else {
+                        info!("Remote description set");
+
+                        // Set up data channel handlers after setting remote description
                         let dc = Arc::clone(&data_channel);
                         let pc = Arc::clone(&peer_connection);
                         let dcs = Arc::clone(&self.data_channels);
@@ -155,8 +156,9 @@ impl ezsockets::ClientExt for WSHost {
                             let dcs = Arc::clone(&dcs);
                             let pcs = Arc::clone(&pcs);
                             match state {
-                                // TODO Check for other states, web disconnects don't always register
-                                RTCPeerConnectionState::Disconnected => {
+                                // Only close on Failed or Closed states, not Disconnected
+                                // Disconnected is a temporary state during network transitions
+                                RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed => {
                                     tokio::spawn(async move {
                                         pc2.close().await.unwrap();
                                         dc2.close().await.unwrap();
