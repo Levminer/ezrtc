@@ -5,6 +5,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use ezrtc::protocol::SessionId;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::one_to_many;
@@ -26,6 +27,7 @@ struct RootMessage {
 struct StatusMessage {
     online: bool,
     metadata: Option<serde_json::Value>,
+    version: Option<String>,
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -56,8 +58,15 @@ async fn status_handler(Path(session_id): Path<String>, State(state): State<Serv
         .find_map(|(_k, v)| if v.session_id == Some(SessionId::new(session_id.clone())) { Some(v.clone()) } else { None });
 
     match ping {
-        Some(ping) => Json(StatusMessage { online: ping.online, metadata: ping.metadata.clone() }),
-        None => Json(StatusMessage { online: false, metadata: None }),
+        Some(ping) => {
+            let online = ping.last_seen.elapsed() <= Duration::from_secs(120);
+            Json(StatusMessage {
+                online,
+                version: ping.version.clone(),
+                metadata: ping.metadata.clone(),
+            })
+        }
+        None => Json(StatusMessage { online: false, metadata: None, version: None }),
     }
 }
 

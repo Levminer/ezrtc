@@ -1,6 +1,6 @@
 [package]
 name = "ezrtc-server"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Lőrik Levente <levminer@levminer.com>"]
 edition = "2021"
 license = "MIT"

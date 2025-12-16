@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -18,11 +18,12 @@ pub struct Session {
     pub users: HashSet<UserId>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Ping {
-    pub online: bool,
+    pub last_seen: Instant,
     pub session_id: Option<SessionId>,
     pub metadata: Option<serde_json::Value>,
+    pub version: Option<String>,
 }
 
 pub type Connections = Arc<RwLock<HashMap<UserId, mpsc::UnboundedSender<Message>>>>;
@@ -47,7 +48,7 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
     let pings2 = pings.clone();
 
     let mut ping_task = tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(60));
+        let mut interval = time::interval(Duration::from_secs(50));
 
         loop {
             interval.tick().await;
@@ -58,16 +59,8 @@ pub async fn user_connected(ws: WebSocket, connections: Connections, sessions: S
             };
 
             if let Some(ping) = status {
-                if ping.online {
-                    pings2.lock().unwrap().insert(
-                        user_id2.clone(),
-                        Arc::new(Ping {
-                            online: false,
-                            session_id: ping.session_id.clone(),
-                            metadata: ping.metadata.clone(),
-                        }),
-                    );
-                } else {
+                let elapsed = ping.last_seen.elapsed();
+                if elapsed > Duration::from_secs(60) {
                     error!("User failed to respond, closing connection: {:?}", user_id2);
                     break;
                 }
@@ -253,7 +246,15 @@ async fn user_message(sender_id: UserId, msg: Message, connections: &Connections
                     SignalMessage::KeepAlive(user_id, status) => {
                         if status.is_host.is_some() {
                             warn!("Received ping from user {:?}", status.session_id);
-                            pings.lock().unwrap().insert(user_id, Arc::new(Ping { online: true, session_id: status.session_id, metadata: status.metadata }));
+                            pings.lock().unwrap().insert(
+                                user_id,
+                                Arc::new(Ping {
+                                    last_seen: Instant::now(),
+                                    session_id: status.session_id,
+                                    metadata: status.metadata,
+                                    version: status.version,
+                                }),
+                            );
                         }
                     }
                     _ => {}
