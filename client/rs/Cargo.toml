@@ -1,6 +1,6 @@
 [package]
 name = "ezrtc"
-version = "0.11.0"
+version = "0.12.0"
 authors = ["Lőrik Levente <levminer@levminer.com>"]
 edition = "2021"
 license = "MIT"

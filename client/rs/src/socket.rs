@@ -325,6 +325,11 @@ impl ezsockets::ClientExt for WSClient {
 
                     peer_connection.set_remote_description(offer).await.unwrap();
 
+                    for candidate in std::mem::take(&mut self.pending_ice_candidates) {
+                        peer_connection.add_ice_candidate(candidate).await.expect("Failed to add queued ICE candidate");
+                        info!("Queued ICE candidate added successfully");
+                    }
+
                     let answer = peer_connection.create_answer(None).await.unwrap();
 
                     peer_connection.set_local_description(answer.clone()).await.unwrap();
