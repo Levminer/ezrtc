@@ -96,6 +96,7 @@ impl EzRTCClient {
                 peer_connection: pc,
                 ice_servers: ice,
                 data_channel_handler,
+                pending_ice_candidates: Vec::new(),
             },
             config,
         )

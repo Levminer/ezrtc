@@ -42,6 +42,7 @@ pub struct WSClient {
     pub ice_servers: Vec<RTCIceServer>,
     pub handle: ezsockets::Client<Self>,
     pub data_channel_handler: Arc<Box<dyn DataChannelHandler>>,
+    pub pending_ice_candidates: Vec<RTCIceCandidateInit>,
 }
 
 pub trait DataChannelHandler: Send + Sync {
@@ -349,9 +350,13 @@ impl ezsockets::ClientExt for WSClient {
                         username_fragment: candidate.username_fragment,
                     };
 
-                    peer_connection.add_ice_candidate(candidate_init).await.unwrap();
-
-                    info!("Client ICE candidate added successfully");
+                    if peer_connection.remote_description().await.is_none() {
+                        self.pending_ice_candidates.push(candidate_init);
+                        info!("Queued ICE candidate (remote description not yet set)");
+                    } else {
+                        peer_connection.add_ice_candidate(candidate_init).await.expect("Failed to add ICE candidate");
+                        info!("Client ICE candidate added successfully");
+                    }
                 }
                 // SignalMessage::Ping(_is_host, user_id) => {
                 //     let ping_message = SignalMessage::Ping(true, user_id);
