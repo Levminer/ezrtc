@@ -1,6 +1,7 @@
 ﻿using Serilog;
 using SIPSorcery.Net;
 using System.Collections.Concurrent;
+using System.Reflection;
 using Websocket.Client;
 using WebSocketSharp;
 
@@ -83,7 +84,7 @@ namespace ezrtc
 			{
 				var keepAlive = SignalMessage.KeepAlive.Decode(msg.Text);
 
-				var message = SignalMessage.KeepAlive.Encode(keepAlive.userId, new Status { is_host = true, session_id = sessionId, version = "0.5.0" });
+				var message = SignalMessage.KeepAlive.Encode(keepAlive.userId, new Status { is_host = true, session_id = sessionId, version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "N/A" });
 
 				websocketClient.Send(message);
 			}

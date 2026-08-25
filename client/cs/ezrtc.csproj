@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -8,7 +8,7 @@
     <Authors>Levminer</Authors>
     <PackageProjectUrl>https://github.com/Levminer/ezrtc</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Levminer/ezrtc</RepositoryUrl>
-    <Version>0.14.0</Version>
+    <Version>0.15.0</Version>
     <Description>Easy cross-platform WebRTC communication</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="README.md">
+    <None Include="README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
